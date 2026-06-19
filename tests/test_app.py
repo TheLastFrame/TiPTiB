@@ -46,6 +46,17 @@ def test_setup_login_create_item_and_pwa_routes():
 
         response = client.post(
             "/items",
+            data={"wishlist_id": 1, "title": "Maybe someday", "status": "idea", "price_avg": "999"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        response = client.get("/dashboard")
+        assert "999.00 EUR" not in response.text
+        response = client.get("/lists")
+        assert "999.00 EUR planned" not in response.text
+
+        response = client.post(
+            "/items",
             data={
                 "wishlist_id": 1,
                 "title": "Dining table",

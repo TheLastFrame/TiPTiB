@@ -20,6 +20,7 @@ from app.models import (
 
 
 ACTIVE_STATUSES = (ItemStatus.idea, ItemStatus.planned, ItemStatus.saving, ItemStatus.ready)
+PLANNED_TOTAL_STATUSES = (ItemStatus.planned, ItemStatus.saving, ItemStatus.ready)
 HISTORY_STATUSES = (ItemStatus.bought, ItemStatus.skipped)
 
 

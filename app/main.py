@@ -32,6 +32,7 @@ from app.models import (
 from app.scheduler import start_scheduler, stop_scheduler
 from app.services import (
     ACTIVE_STATUSES,
+    PLANNED_TOTAL_STATUSES,
     account_breakdown,
     add_savings_entry,
     ensure_defaults,
@@ -257,7 +258,15 @@ def dashboard(
         .order_by(SavingsRule.next_run_at)
         .limit(5)
     ).all()
-    planned_total = sum((item_target(item) for item in db.scalars(select(Item).where(Item.user_id == user.id, Item.status.in_(ACTIVE_STATUSES))).all()), Decimal("0.00"))
+    planned_total = sum(
+        (
+            item_target(item)
+            for item in db.scalars(
+                select(Item).where(Item.user_id == user.id, Item.status.in_(PLANNED_TOTAL_STATUSES))
+            ).all()
+        ),
+        Decimal("0.00"),
+    )
     saved_total = money(db.scalar(select(func.coalesce(func.sum(SavingsEntry.amount), 0)).where(SavingsEntry.user_id == user.id)))
     context = common_context(db, user) | {
         "request": request,
@@ -282,7 +291,7 @@ def lists(
     rows = []
     for wishlist in db.scalars(select(Wishlist).where(Wishlist.user_id == user.id).order_by(Wishlist.name)).all():
         items = db.scalars(select(Item).where(Item.user_id == user.id, Item.wishlist_id == wishlist.id, Item.status.in_(ACTIVE_STATUSES))).all()
-        total = sum((item_target(item) for item in items), Decimal("0.00"))
+        total = sum((item_target(item) for item in items if item.status in PLANNED_TOTAL_STATUSES), Decimal("0.00"))
         saved = money(
             db.scalar(
                 select(func.coalesce(func.sum(SavingsEntry.amount), 0))
