@@ -25,6 +25,7 @@
 
   <section class="panel" style="margin-top: 16px;">
     <form class="form" method="post" action="/lists">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <h2>Add wishlist</h2>
       <input class="input" name="name" placeholder="Moving House" required>
       <input class="input" name="description" placeholder="Optional note">

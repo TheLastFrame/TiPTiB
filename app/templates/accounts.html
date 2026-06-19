@@ -18,6 +18,7 @@
           <strong>{{ row.total|money }}</strong>
         </div>
         <form class="form" method="post" action="/accounts/{{ row.account.id }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input class="input" name="name" value="{{ row.account.name }}" required>
           <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="is_default" {{ "checked" if row.account.is_default else "" }}> Default</label>
           <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="archived" {{ "checked" if row.account.archived else "" }}> Archived</label>
@@ -29,6 +30,7 @@
 
   <section class="panel" style="margin-top: 16px;">
     <form class="form" method="post" action="/accounts">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <h2>Add account</h2>
       <input class="input" name="name" placeholder="ING Savings" required>
       <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="is_default"> Default</label>

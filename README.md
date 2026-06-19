@@ -36,6 +36,7 @@ Open `http://127.0.0.1:8000` and create the first admin user.
 ## Docker
 
 ```powershell
+$env:TIPTIB_SECRET_KEY = $(python -c "import secrets; print(secrets.token_urlsafe(48))")
 docker compose up --build
 ```
 
@@ -46,11 +47,30 @@ The app will be available at `http://127.0.0.1:8000`.
 Copy `.env.example` to `.env` or set environment variables:
 
 - `TIPTIB_DATABASE_URL`
-- `TIPTIB_SECRET_KEY`
+- `TIPTIB_SECRET_KEY` (required for Docker and production; use a unique random value with at least 32 characters)
+- `TIPTIB_ENVIRONMENT` (`development` or `production`)
+- `TIPTIB_ALLOWED_HOSTS` (comma-separated hostnames; required without `*` in production)
+- `TIPTIB_SESSION_COOKIE_SECURE` (`true` behind HTTPS, `false` only for local HTTP)
+- `TIPTIB_ALLOW_WEB_SETUP` (`false` by default in production)
 - `TIPTIB_DEFAULT_CURRENCY`
 - `TIPTIB_DEFAULT_TIMEZONE`
 - `TIPTIB_BOOTSTRAP_USERNAME`
 - `TIPTIB_BOOTSTRAP_PASSWORD`
+
+## Public Deployment
+
+Run TiPTiB behind an HTTPS reverse proxy such as Caddy, Nginx, Traefik, or Cloudflare Tunnel, and preserve the original `Host` header. In production mode the app refuses default or short secrets, requires explicit allowed hosts, sends secure session cookies, emits security headers, and blocks first-run web setup unless you either provide bootstrap credentials or intentionally set `TIPTIB_ALLOW_WEB_SETUP=true`.
+
+For a public instance, set at least:
+
+```powershell
+$env:TIPTIB_ENVIRONMENT = "production"
+$env:TIPTIB_SECRET_KEY = "<unique random value, 32+ chars>"
+$env:TIPTIB_ALLOWED_HOSTS = "tiptib.example.com"
+$env:TIPTIB_SESSION_COOKIE_SECURE = "true"
+$env:TIPTIB_BOOTSTRAP_USERNAME = "admin"
+$env:TIPTIB_BOOTSTRAP_PASSWORD = "<long admin password>"
+```
 
 ## Tests
 

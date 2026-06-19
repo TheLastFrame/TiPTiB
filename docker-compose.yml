@@ -5,7 +5,11 @@ services:
       - "8000:8000"
     environment:
       TIPTIB_DATABASE_URL: sqlite:////app/data/tiptib.db
-      TIPTIB_SECRET_KEY: ${TIPTIB_SECRET_KEY:-change-this-secret}
+      TIPTIB_SECRET_KEY: ${TIPTIB_SECRET_KEY:?Set TIPTIB_SECRET_KEY to a unique random value with at least 32 characters}
+      TIPTIB_ENVIRONMENT: ${TIPTIB_ENVIRONMENT:-development}
+      TIPTIB_ALLOWED_HOSTS: ${TIPTIB_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      TIPTIB_SESSION_COOKIE_SECURE: ${TIPTIB_SESSION_COOKIE_SECURE:-true}
+      TIPTIB_ALLOW_WEB_SETUP: ${TIPTIB_ALLOW_WEB_SETUP:-false}
       TIPTIB_DEFAULT_CURRENCY: ${TIPTIB_DEFAULT_CURRENCY:-EUR}
       TIPTIB_DEFAULT_TIMEZONE: ${TIPTIB_DEFAULT_TIMEZONE:-Europe/Vienna}
     volumes:

@@ -1,5 +1,5 @@
-const CACHE_NAME = "tiptib-static-v2";
-const STATIC_ASSETS = ["/static/styles.css", "/static/icons/icon.svg"];
+const CACHE_NAME = "tiptib-static-v3";
+const STATIC_ASSETS = ["/static/styles.css", "/static/app.js", "/static/icons/icon.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));

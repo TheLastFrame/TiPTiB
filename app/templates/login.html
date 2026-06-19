@@ -8,6 +8,7 @@
   </div>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <form class="form" method="post" action="/login">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="field">
       <label for="username">Username</label>
       <input class="input" id="username" name="username" required autocomplete="username">

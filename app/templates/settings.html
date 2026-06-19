@@ -10,6 +10,7 @@
   <section class="grid two">
     <article class="panel">
       <form class="form" method="post" action="/categories">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <h2>Categories</h2>
         {% for category in categories %}
           <div class="row"><span class="chip" style="border-left: 4px solid {{ category.color }}">{{ category.name }}</span></div>
@@ -24,6 +25,7 @@
 
     <article class="panel">
       <form class="form" method="post" action="/settings/users">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <h2>Add user</h2>
         {% if not user.is_admin %}<p>Only admins can add users.</p>{% endif %}
         <input class="input" name="display_name" placeholder="Display name" {{ "disabled" if not user.is_admin else "" }}>
@@ -35,6 +37,7 @@
 
     <article class="panel">
       <form class="form" method="post" action="/logout">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <h2>Session</h2>
         <p>Signed in as {{ user.username }}.</p>
         <button class="button ghost" type="submit">Log out</button>

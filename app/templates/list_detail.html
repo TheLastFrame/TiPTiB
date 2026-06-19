@@ -45,13 +45,13 @@
           <option value="actual_price" {{ "selected" if selected_sort_by == "actual_price" else "" }}>Sort: actual price</option>
         </select>
         <input type="hidden" name="sort_dir" value="{{ selected_sort_dir }}">
-        <button class="button secondary sort-dir-button" type="button" onclick="this.form.sort_dir.value='{{ next_sort_dir }}'; this.form.submit();">
+        <button class="button secondary sort-dir-button" type="button" data-next-sort-dir="{{ next_sort_dir }}">
           {{ "↑ Asc" if selected_sort_dir == "asc" else "↓ Desc" }}
         </button>
       </div>
       <div class="filter-actions">
         <label class="toggle-card">
-          <input type="checkbox" name="show_sum" value="true" onchange="this.form.submit()" {{ "checked" if show_sum else "" }}>
+          <input type="checkbox" name="show_sum" value="true" data-submit-on-change {{ "checked" if show_sum else "" }}>
           <span>Show sum</span>
         </label>
         <button class="button secondary" type="submit">Apply filters</button>

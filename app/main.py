@@ -1,20 +1,33 @@
 from __future__ import annotations
 
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.auth import authenticate_user, create_user, current_user, login_user, logout_user, users_exist
+from app.auth import (
+    authenticate_user,
+    check_login_rate_limit,
+    create_user,
+    current_user,
+    login_user,
+    logout_user,
+    record_login_result,
+    users_exist,
+)
 from app.config import get_settings
 from app.database import SessionLocal, get_db, init_db
 from app.models import (
@@ -43,9 +56,17 @@ from app.services import (
     progress_percent,
     process_due_savings_rules,
 )
+from app.security import (
+    get_csrf_token,
+    security_headers,
+    validate_csrf,
+    validate_first_run_setup_allowed,
+    validate_security_settings,
+)
 
 settings = get_settings()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 def money_filter(value: object | None) -> str:
@@ -60,20 +81,25 @@ templates.env.globals["settings"] = settings
 
 
 def render(request: Request, name: str, context: dict[str, object] | None = None, status_code: int = 200):
+    template_context = dict(context or {})
+    template_context.setdefault("csrf_token", get_csrf_token(request))
     return templates.TemplateResponse(
         name=name,
         request=request,
-        context=context or {},
+        context=template_context,
         status_code=status_code,
     )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_security_settings(settings)
     init_db()
     db = SessionLocal()
     try:
-        if settings.bootstrap_username and settings.bootstrap_password and not users_exist(db):
+        has_users = users_exist(db)
+        validate_first_run_setup_allowed(settings, has_users)
+        if settings.bootstrap_username and settings.bootstrap_password and not has_users:
             user = create_user(
                 db,
                 username=settings.bootstrap_username,
@@ -95,9 +121,20 @@ app.add_middleware(
     secret_key=settings.secret_key,
     session_cookie=settings.session_cookie_name,
     same_site="lax",
-    https_only=False,
+    https_only=settings.secure_session_cookie,
+    max_age=settings.session_max_age_seconds,
 )
+if settings.allowed_host_list != ["*"]:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_host_list)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for header, value in security_headers(settings).items():
+        response.headers.setdefault(header, value)
+    return response
 
 
 def redirect(path: str, status_code: int = 303) -> RedirectResponse:
@@ -110,7 +147,71 @@ def decimal_or_none(value: str | None) -> Decimal | None:
     try:
         return money(value)
     except (InvalidOperation, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid money amount.")
+
+
+def decimal_required(value: str, field: str = "amount") -> Decimal:
+    if not value.strip():
+        raise HTTPException(status_code=400, detail=f"Invalid {field}.")
+    try:
+        return money(value)
+    except (InvalidOperation, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid {field}.") from exc
+
+
+def item_status_or_400(value: str) -> ItemStatus:
+    try:
+        return ItemStatus(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid item status.") from exc
+
+
+def cadence_or_400(value: str) -> RecurrenceCadence:
+    try:
+        return RecurrenceCadence(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid recurrence cadence.") from exc
+
+
+def parse_datetime_or_400(value: str) -> datetime:
+    try:
+        run_at = datetime.fromisoformat(value) if value else datetime.now(timezone.utc)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid next run date.") from exc
+    if run_at.tzinfo is None:
+        return run_at.replace(tzinfo=timezone.utc)
+    return run_at
+
+
+def external_url_or_none(value: str) -> str | None:
+    url = value.strip()
+    if not url:
         return None
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="Links must use http or https.")
+    return url
+
+
+def color_or_400(value: str) -> str:
+    if not COLOR_RE.fullmatch(value.strip()):
+        raise HTTPException(status_code=400, detail="Invalid color.")
+    return value.strip()
+
+
+def required_text(value: str, field: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail=f"{field} is required.")
+    return cleaned
+
+
+def commit_or_400(db: Session, detail: str) -> None:
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=detail) from exc
 
 
 def scoped_category(db: Session, user: User, category_id: int | None) -> Category | None:
@@ -200,20 +301,28 @@ def root(request: Request, db: Annotated[Session, Depends(get_db)]):
 def setup_form(request: Request, db: Annotated[Session, Depends(get_db)]):
     if users_exist(db):
         return redirect("/login")
-    return render(request, "setup.html")
+    if settings.is_production and not settings.allow_web_setup:
+        raise HTTPException(status_code=403, detail="Web setup is disabled.")
+    return render(request, "setup.html", {"error": None})
 
 
 @app.post("/setup")
 def setup(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
+    csrf: Annotated[None, Depends(validate_csrf)],
     username: Annotated[str, Form()],
     password: Annotated[str, Form()],
     display_name: Annotated[str, Form()] = "",
 ):
     if users_exist(db):
         return redirect("/login")
-    user = create_user(db, username=username, password=password, display_name=display_name or username, is_admin=True)
+    if settings.is_production and not settings.allow_web_setup:
+        raise HTTPException(status_code=403, detail="Web setup is disabled.")
+    try:
+        user = create_user(db, username=username, password=password, display_name=display_name or username, is_admin=True)
+    except ValueError as exc:
+        return render(request, "setup.html", {"error": str(exc)}, status_code=400)
     ensure_defaults(db, user)
     login_user(request, user)
     return redirect("/dashboard")
@@ -230,19 +339,23 @@ def login_form(request: Request, db: Annotated[Session, Depends(get_db)]):
 def login(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
+    csrf: Annotated[None, Depends(validate_csrf)],
     username: Annotated[str, Form()],
     password: Annotated[str, Form()],
 ):
+    check_login_rate_limit(request, username)
     user = authenticate_user(db, username, password)
     if not user:
+        record_login_result(request, username, success=False)
         return render(request, "login.html", {"error": "Check your username and password."}, status_code=400)
+    record_login_result(request, username, success=True)
     ensure_defaults(db, user)
     login_user(request, user)
     return redirect("/dashboard")
 
 
 @app.post("/logout")
-def logout(request: Request):
+def logout(request: Request, csrf: Annotated[None, Depends(validate_csrf)]):
     logout_user(request)
     return redirect("/login")
 
@@ -328,11 +441,12 @@ def lists(
 def create_list(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
     name: Annotated[str, Form()],
     description: Annotated[str, Form()] = "",
 ):
-    db.add(Wishlist(user_id=user.id, name=name.strip(), description=description.strip() or None))
-    db.commit()
+    db.add(Wishlist(user_id=user.id, name=required_text(name, "Wishlist name"), description=description.strip() or None))
+    commit_or_400(db, "A wishlist with that name already exists.")
     return redirect("/lists")
 
 
@@ -350,6 +464,17 @@ def list_detail(
     sort_dir: str = "asc",
 ):
     wishlist = scoped_wishlist(db, user, wishlist_id)
+    selected_status = status if status in {item_status.value for item_status in ItemStatus} else ""
+    selected_category_id = category_id
+    if selected_category_id and not db.scalar(
+        select(Category.id).where(Category.id == selected_category_id, Category.user_id == user.id)
+    ):
+        selected_category_id = 0
+    selected_account_id = account_id
+    if selected_account_id and not db.scalar(
+        select(SavingAccount.id).where(SavingAccount.id == selected_account_id, SavingAccount.user_id == user.id)
+    ):
+        selected_account_id = 0
     selected_sort_by = sort_by if sort_by in {"rank", "max_price", "actual_price"} else "rank"
     selected_sort_dir = sort_dir if sort_dir in {"asc", "desc"} else "asc"
     total_active_items = db.scalar(
@@ -359,22 +484,22 @@ def list_detail(
             Item.status.in_(ACTIVE_STATUSES),
         )
     )
-    filters_applied = bool(status or category_id or account_id)
+    filters_applied = bool(selected_status or selected_category_id or selected_account_id)
     query = (
         select(Item)
         .options(selectinload(Item.category), selectinload(Item.savings_entries).selectinload(SavingsEntry.account), selectinload(Item.savings_rule))
         .where(Item.user_id == user.id, Item.wishlist_id == wishlist.id)
         .order_by(Item.rank, Item.created_at)
     )
-    if status:
-        query = query.where(Item.status == ItemStatus(status))
+    if selected_status:
+        query = query.where(Item.status == ItemStatus(selected_status))
     else:
         query = query.where(Item.status.in_(ACTIVE_STATUSES))
-    if category_id:
-        query = query.where(Item.category_id == category_id)
+    if selected_category_id:
+        query = query.where(Item.category_id == selected_category_id)
     items = db.scalars(query).all()
-    if account_id:
-        items = [item for item in items if any(entry.account_id == account_id for entry in item.savings_entries)]
+    if selected_account_id:
+        items = [item for item in items if any(entry.account_id == selected_account_id for entry in item.savings_entries)]
     def sort_key(item: Item):
         value = sort_price_value(item, selected_sort_by)
         if value is None:
@@ -406,9 +531,9 @@ def list_detail(
             "active": "lists",
             "wishlist": wishlist,
             "item_cards": item_cards,
-            "selected_status": status,
-            "selected_category_id": category_id,
-            "selected_account_id": account_id,
+            "selected_status": selected_status,
+            "selected_category_id": selected_category_id,
+            "selected_account_id": selected_account_id,
             "selected_sort_by": selected_sort_by,
             "selected_sort_dir": selected_sort_dir,
             "next_sort_dir": "desc" if selected_sort_dir == "asc" else "asc",
@@ -427,6 +552,7 @@ def list_detail(
 def create_item(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
     wishlist_id: Annotated[int, Form()],
     title: Annotated[str, Form()],
     category_id: Annotated[int, Form()] = 0,
@@ -444,18 +570,18 @@ def create_item(
         user_id=user.id,
         wishlist_id=wishlist.id,
         category_id=category.id if category else None,
-        title=title.strip(),
-        status=ItemStatus(status),
+        title=required_text(title, "Item title"),
+        status=item_status_or_400(status),
         rank=next_rank(db, user.id, wishlist.id),
         price_min=decimal_or_none(price_min),
         price_avg=decimal_or_none(price_avg),
         price_max=decimal_or_none(price_max),
         actual_price=decimal_or_none(actual_price),
-        url=url.strip() or None,
+        url=external_url_or_none(url),
         notes=notes.strip() or None,
     )
     db.add(item)
-    db.commit()
+    commit_or_400(db, "Unable to create item.")
     return redirect(f"/items/{item.id}")
 
 
@@ -505,6 +631,7 @@ def item_detail(
 def update_item(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
     item_id: int,
     title: Annotated[str, Form()],
     wishlist_id: Annotated[int, Form()],
@@ -520,19 +647,19 @@ def update_item(
 ):
     item = scoped_item(db, user, item_id)
     wishlist = scoped_wishlist(db, user, wishlist_id)
-    item.title = title.strip()
+    item.title = required_text(title, "Item title")
     item.wishlist_id = wishlist.id
     category = scoped_category(db, user, category_id)
     item.category_id = category.id if category else None
-    item.status = ItemStatus(status)
+    item.status = item_status_or_400(status)
     item.rank = rank
     item.price_min = decimal_or_none(price_min)
     item.price_avg = decimal_or_none(price_avg)
     item.price_max = decimal_or_none(price_max)
     item.actual_price = decimal_or_none(actual_price)
-    item.url = url.strip() or None
+    item.url = external_url_or_none(url)
     item.notes = notes.strip() or None
-    db.commit()
+    commit_or_400(db, "Unable to update item.")
     return redirect(f"/items/{item.id}")
 
 
@@ -540,6 +667,7 @@ def update_item(
 def create_savings_entry(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
     item_id: int,
     amount: Annotated[str, Form()],
     account_id: Annotated[int, Form()] = 0,
@@ -551,7 +679,7 @@ def create_savings_entry(
         db,
         user_id=user.id,
         item=item,
-        amount=money(amount),
+        amount=decimal_required(amount),
         account_id=account.id if account else None,
         kind=SavingsEntryKind.manual,
         note=note.strip() or None,
@@ -563,6 +691,7 @@ def create_savings_entry(
 def upsert_recurring_rule(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
     item_id: int,
     amount: Annotated[str, Form()],
     cadence: Annotated[str, Form()],
@@ -572,18 +701,16 @@ def upsert_recurring_rule(
 ):
     item = scoped_item(db, user, item_id)
     account = scoped_account(db, user, account_id)
-    run_at = datetime.fromisoformat(next_run_at) if next_run_at else datetime.now(timezone.utc)
-    if run_at.tzinfo is None:
-        run_at = run_at.replace(tzinfo=timezone.utc)
+    run_at = parse_datetime_or_400(next_run_at)
     rule = item.savings_rule or SavingsRule(user_id=user.id, item_id=item.id)
-    rule.amount = money(amount)
-    rule.cadence = RecurrenceCadence(cadence)
+    rule.amount = decimal_required(amount)
+    rule.cadence = cadence_or_400(cadence)
     rule.account_id = account.id if account else None
     rule.next_run_at = run_at
     rule.active = active == "on"
     item.status = ItemStatus.saving if item.status in (ItemStatus.idea, ItemStatus.planned) else item.status
     db.add(rule)
-    db.commit()
+    commit_or_400(db, "Unable to save recurring rule.")
     return redirect(f"/items/{item.id}?tab=budget")
 
 
@@ -591,11 +718,12 @@ def upsert_recurring_rule(
 def create_category(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
     name: Annotated[str, Form()],
     color: Annotated[str, Form()] = "#8b8f78",
 ):
-    db.add(Category(user_id=user.id, name=name.strip(), color=color))
-    db.commit()
+    db.add(Category(user_id=user.id, name=required_text(name, "Category name"), color=color_or_400(color)))
+    commit_or_400(db, "A category with that name already exists.")
     return redirect("/settings")
 
 
@@ -616,13 +744,14 @@ def accounts(
 def create_account(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
     name: Annotated[str, Form()],
     is_default: Annotated[str | None, Form()] = None,
 ):
     if is_default:
         db.query(SavingAccount).filter(SavingAccount.user_id == user.id).update({"is_default": False})
-    db.add(SavingAccount(user_id=user.id, name=name.strip(), is_default=bool(is_default)))
-    db.commit()
+    db.add(SavingAccount(user_id=user.id, name=required_text(name, "Account name"), is_default=bool(is_default)))
+    commit_or_400(db, "An account with that name already exists.")
     return redirect("/accounts")
 
 
@@ -630,6 +759,7 @@ def create_account(
 def update_account(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
     account_id: int,
     name: Annotated[str, Form()],
     archived: Annotated[str | None, Form()] = None,
@@ -640,10 +770,10 @@ def update_account(
         raise HTTPException(status_code=404)
     if is_default:
         db.query(SavingAccount).filter(SavingAccount.user_id == user.id).update({"is_default": False})
-    account.name = name.strip()
+    account.name = required_text(name, "Account name")
     account.archived = bool(archived)
     account.is_default = bool(is_default)
-    db.commit()
+    commit_or_400(db, "An account with that name already exists.")
     return redirect("/accounts")
 
 
@@ -660,13 +790,17 @@ def settings_page(
 def create_user_from_settings(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
     username: Annotated[str, Form()],
     password: Annotated[str, Form()],
     display_name: Annotated[str, Form()] = "",
 ):
     if not user.is_admin:
         raise HTTPException(status_code=403)
-    new_user = create_user(db, username=username, password=password, display_name=display_name or username)
+    try:
+        new_user = create_user(db, username=username, password=password, display_name=display_name or username)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     ensure_defaults(db, new_user)
     return redirect("/settings")
 

@@ -6,7 +6,9 @@
     <h1>Set up TiPTiB</h1>
     <p>Create the first admin user for this self-hosted instance.</p>
   </div>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <form class="form" method="post" action="/setup">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="field">
       <label for="display_name">Display name</label>
       <input class="input" id="display_name" name="display_name" autocomplete="name">
