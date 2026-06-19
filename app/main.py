@@ -332,6 +332,7 @@ def list_detail(
     status: str = "",
     category_id: int = 0,
     account_id: int = 0,
+    show_sum: bool = False,
 ):
     wishlist = scoped_wishlist(db, user, wishlist_id)
     query = (
@@ -349,15 +350,20 @@ def list_detail(
     items = db.scalars(query).all()
     if account_id:
         items = [item for item in items if any(entry.account_id == account_id for entry in item.savings_entries)]
-    item_cards = [
-        {
-            "item": item,
-            "saved": item_saved_total(db, item.id),
-            "target": item_target(item),
-            "progress": progress_percent(item_saved_total(db, item.id), item_target(item)),
-        }
-        for item in items
-    ]
+    item_cards = []
+    for item in items:
+        saved = item_saved_total(db, item.id)
+        target = item_target(item)
+        item_cards.append(
+            {
+                "item": item,
+                "saved": saved,
+                "target": target,
+                "progress": progress_percent(saved, target),
+            }
+        )
+    filtered_target_total = sum((card["target"] for card in item_cards), Decimal("0.00"))
+    filtered_saved_total = sum((card["saved"] for card in item_cards), Decimal("0.00"))
     return render(
         request,
         "list_detail.html",
@@ -369,6 +375,11 @@ def list_detail(
             "selected_status": status,
             "selected_category_id": category_id,
             "selected_account_id": account_id,
+            "show_sum": show_sum,
+            "filtered_item_count": len(item_cards),
+            "filtered_target_total": filtered_target_total,
+            "filtered_saved_total": filtered_saved_total,
+            "filtered_progress": progress_percent(filtered_saved_total, filtered_target_total),
         },
     )
 

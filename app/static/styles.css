@@ -182,6 +182,26 @@ textarea.input { min-height: 96px; resize: vertical; }
   stroke-linecap: round;
 }
 .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.toggle-card {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 88%, white);
+  color: var(--brand-strong);
+  font-weight: 700;
+}
+.toggle-card input { accent-color: var(--brand); }
+.filter-summary {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  border-color: color-mix(in srgb, var(--brand) 34%, var(--line));
+}
 .error { color: var(--danger); background: #f5e4df; border-radius: 8px; padding: 10px; }
 .empty { padding: 24px; text-align: center; }
 .tableish { display: grid; gap: 10px; }

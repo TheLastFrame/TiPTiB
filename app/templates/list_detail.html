@@ -29,8 +29,27 @@
         <option value="{{ account.id }}" {{ "selected" if selected_account_id == account.id else "" }}>{{ account.name }}</option>
       {% endfor %}
     </select>
+    <label class="toggle-card">
+      <input type="checkbox" name="show_sum" value="true" onchange="this.form.submit()" {{ "checked" if show_sum else "" }}>
+      <span>Show sum</span>
+    </label>
     <button class="button secondary" type="submit">Filter</button>
   </form>
+
+  {% if show_sum %}
+    <section class="panel filter-summary">
+      <div>
+        <span class="eyebrow">Filtered sum</span>
+        <h2>{{ filtered_target_total|money }}</h2>
+      </div>
+      <div class="row wrap">
+        <span class="chip">{{ filtered_item_count }} items</span>
+        <span class="chip">{{ filtered_saved_total|money }} saved</span>
+        <span class="chip">{{ filtered_progress }}%</span>
+      </div>
+      <div class="progress"><span style="--value: {{ filtered_progress }}%"></span></div>
+    </section>
+  {% endif %}
 
   <section class="grid two" style="margin-top: 16px;">
     {% for card in item_cards %}

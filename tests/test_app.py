@@ -75,6 +75,17 @@ def test_setup_login_create_item_and_pwa_routes():
         assert response.status_code == 200
         assert "Dining table" in response.text
         assert 'href="/items/2"' in response.text
+        assert 'onchange="this.form.submit()"' in response.text
+
+        response = client.get("/lists/1?show_sum=true")
+        assert response.status_code == 200
+        assert "Filtered sum" in response.text
+        assert "1 449.00 EUR" in response.text
+
+        response = client.get("/lists/1?status=planned&show_sum=true")
+        assert response.status_code == 200
+        assert "450.00 EUR" in response.text
+        assert "999.00 EUR" not in response.text
 
         item_url = response = client.get("/items/1")
         assert item_url.status_code == 200
