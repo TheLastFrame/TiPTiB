@@ -71,21 +71,83 @@ def test_setup_login_create_item_and_pwa_routes():
         assert response.status_code == 303
         assert response.headers["location"].startswith("/items/")
 
+        response = client.post(
+            "/items",
+            data={
+                "wishlist_id": 1,
+                "title": "Desk lamp",
+                "status": "planned",
+                "price_min": "20",
+                "price_avg": "35",
+                "price_max": "80",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        response = client.post(
+            "/items",
+            data={
+                "wishlist_id": 1,
+                "title": "Fallback speaker",
+                "status": "planned",
+                "price_avg": "650",
+                "actual_price": "15",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        response = client.post(
+            "/items",
+            data={
+                "wishlist_id": 1,
+                "title": "Actual-first shelf",
+                "status": "planned",
+                "price_min": "120",
+                "price_max": "900",
+                "actual_price": "40",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
         response = client.get("/lists/1")
         assert response.status_code == 200
         assert "Dining table" in response.text
         assert 'href="/items/2"' in response.text
+        assert '<details class="filter-drawer">' in response.text
+        assert "shown</span>" not in response.text
         assert 'onchange="this.form.submit()"' in response.text
 
         response = client.get("/lists/1?show_sum=true")
         assert response.status_code == 200
         assert "Filtered sum" in response.text
-        assert "1 449.00 EUR" in response.text
+        assert "1 539.00 EUR" in response.text
 
         response = client.get("/lists/1?status=planned&show_sum=true")
         assert response.status_code == 200
-        assert "450.00 EUR" in response.text
+        assert "4/5 shown" in response.text
+        assert "540.00 EUR" in response.text
         assert "999.00 EUR" not in response.text
+
+        response = client.get("/lists/1?status=planned&sort_by=max_price&sort_dir=desc")
+        assert response.status_code == 200
+        assert response.text.index("Actual-first shelf") < response.text.index("Dining table")
+        assert response.text.index("Dining table") < response.text.index("Fallback speaker")
+
+        response = client.get("/lists/1?status=planned&sort_by=max_price&sort_dir=asc")
+        assert response.status_code == 200
+        assert response.text.index("Desk lamp") < response.text.index("Dining table")
+
+        response = client.get("/lists/1?status=planned&sort_by=actual_price&sort_dir=asc")
+        assert response.status_code == 200
+        assert response.text.index("Fallback speaker") < response.text.index("Desk lamp")
+        assert response.text.index("Desk lamp") < response.text.index("Actual-first shelf")
+
+        response = client.get("/lists/1?status=planned&sort_by=actual_price&sort_dir=desc")
+        assert response.status_code == 200
+        assert response.text.index("Dining table") < response.text.index("Desk lamp")
 
         item_url = response = client.get("/items/1")
         assert item_url.status_code == 200

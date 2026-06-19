@@ -181,7 +181,63 @@ textarea.input { min-height: 96px; resize: vertical; }
   stroke-width: 2.8;
   stroke-linecap: round;
 }
-.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.filter-drawer {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 250, 240, .58);
+  overflow: hidden;
+}
+.filter-summary-toggle {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  color: var(--brand-strong);
+  cursor: pointer;
+  font-weight: 800;
+  list-style: none;
+}
+.filter-summary-toggle::-webkit-details-marker { display: none; }
+.filter-summary-toggle::after {
+  content: "⌄";
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--brand-strong);
+  transition: transform .16s ease;
+}
+.filter-drawer[open] .filter-summary-toggle::after { transform: rotate(180deg); }
+.filters {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 250, 240, .34);
+}
+.filter-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.filter-row .input:first-child:last-child { grid-column: 1 / -1; }
+.filter-row select[name="account_id"] { grid-column: 1 / -1; }
+.sort-row {
+  grid-template-columns: minmax(0, 1fr) minmax(96px, .48fr);
+}
+.filter-actions {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  gap: 8px;
+}
+.sort-dir-button {
+  padding-left: 10px;
+  padding-right: 10px;
+}
 .toggle-card {
   min-height: 44px;
   display: flex;
@@ -209,6 +265,9 @@ textarea.input { min-height: 96px; resize: vertical; }
   .shell { padding: 32px 24px 110px; }
   .dashboard-grid { grid-template-columns: 1.1fr .9fr; align-items: start; }
   .stats { max-width: 720px; }
+  .filter-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .filter-row select[name="account_id"] { grid-column: auto; }
+  .sort-row { grid-template-columns: minmax(0, 1fr) minmax(110px, .34fr); }
 }
 @media (max-width: 520px) {
   .stats { grid-template-columns: 1fr; }

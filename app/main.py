@@ -154,6 +154,19 @@ def scoped_wishlist(db: Session, user: User, wishlist_id: int) -> Wishlist:
     return wishlist
 
 
+def sort_price_value(item: Item, sort_by: str) -> Decimal | int | None:
+    """Price sort fallbacks are product behavior, not DB convenience.
+
+    max_price: max -> avg -> actual -> min
+    actual_price: actual -> avg -> min -> max
+    """
+    if sort_by == "max_price":
+        return item.price_max or item.price_avg or item.actual_price or item.price_min
+    if sort_by == "actual_price":
+        return item.actual_price or item.price_avg or item.price_min or item.price_max
+    return item.rank
+
+
 def common_context(db: Session, user: User) -> dict[str, object]:
     return {
         "user": user,
@@ -333,8 +346,20 @@ def list_detail(
     category_id: int = 0,
     account_id: int = 0,
     show_sum: bool = False,
+    sort_by: str = "rank",
+    sort_dir: str = "asc",
 ):
     wishlist = scoped_wishlist(db, user, wishlist_id)
+    selected_sort_by = sort_by if sort_by in {"rank", "max_price", "actual_price"} else "rank"
+    selected_sort_dir = sort_dir if sort_dir in {"asc", "desc"} else "asc"
+    total_active_items = db.scalar(
+        select(func.count(Item.id)).where(
+            Item.user_id == user.id,
+            Item.wishlist_id == wishlist.id,
+            Item.status.in_(ACTIVE_STATUSES),
+        )
+    )
+    filters_applied = bool(status or category_id or account_id)
     query = (
         select(Item)
         .options(selectinload(Item.category), selectinload(Item.savings_entries).selectinload(SavingsEntry.account), selectinload(Item.savings_rule))
@@ -350,6 +375,15 @@ def list_detail(
     items = db.scalars(query).all()
     if account_id:
         items = [item for item in items if any(entry.account_id == account_id for entry in item.savings_entries)]
+    def sort_key(item: Item):
+        value = sort_price_value(item, selected_sort_by)
+        if value is None:
+            return (1, Decimal("0.00"))
+        if selected_sort_dir == "desc":
+            return (0, -value)
+        return (0, value)
+
+    items = sorted(items, key=sort_key)
     item_cards = []
     for item in items:
         saved = item_saved_total(db, item.id)
@@ -375,6 +409,11 @@ def list_detail(
             "selected_status": status,
             "selected_category_id": category_id,
             "selected_account_id": account_id,
+            "selected_sort_by": selected_sort_by,
+            "selected_sort_dir": selected_sort_dir,
+            "next_sort_dir": "desc" if selected_sort_dir == "asc" else "asc",
+            "filters_applied": filters_applied,
+            "total_active_items": total_active_items or 0,
             "show_sum": show_sum,
             "filtered_item_count": len(item_cards),
             "filtered_target_total": filtered_target_total,
@@ -395,6 +434,7 @@ def create_item(
     price_min: Annotated[str, Form()] = "",
     price_avg: Annotated[str, Form()] = "",
     price_max: Annotated[str, Form()] = "",
+    actual_price: Annotated[str, Form()] = "",
     url: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
 ):
@@ -410,6 +450,7 @@ def create_item(
         price_min=decimal_or_none(price_min),
         price_avg=decimal_or_none(price_avg),
         price_max=decimal_or_none(price_max),
+        actual_price=decimal_or_none(actual_price),
         url=url.strip() or None,
         notes=notes.strip() or None,
     )

@@ -10,31 +10,54 @@
     {% if wishlist.description %}<p>{{ wishlist.description }}</p>{% endif %}
   </section>
 
-  <form class="filters" method="get" action="/lists/{{ wishlist.id }}">
-    <select class="input" name="status">
-      <option value="">Active</option>
-      {% for status in item_statuses %}
-        <option value="{{ status.value }}" {{ "selected" if selected_status == status.value else "" }}>{{ status.value }}</option>
-      {% endfor %}
-    </select>
-    <select class="input" name="category_id">
-      <option value="0">All categories</option>
-      {% for category in categories %}
-        <option value="{{ category.id }}" {{ "selected" if selected_category_id == category.id else "" }}>{{ category.name }}</option>
-      {% endfor %}
-    </select>
-    <select class="input" name="account_id">
-      <option value="0">All accounts</option>
-      {% for account in accounts %}
-        <option value="{{ account.id }}" {{ "selected" if selected_account_id == account.id else "" }}>{{ account.name }}</option>
-      {% endfor %}
-    </select>
-    <label class="toggle-card">
-      <input type="checkbox" name="show_sum" value="true" onchange="this.form.submit()" {{ "checked" if show_sum else "" }}>
-      <span>Show sum</span>
-    </label>
-    <button class="button secondary" type="submit">Filter</button>
-  </form>
+  <details class="filter-drawer">
+    <summary class="filter-summary-toggle">
+      <span>Filters & sorting</span>
+      {% if filters_applied %}
+        <span class="chip">{{ item_cards|length }}/{{ total_active_items }} shown</span>
+      {% endif %}
+    </summary>
+    <form class="filters" method="get" action="/lists/{{ wishlist.id }}">
+      <div class="filter-row">
+        <select class="input" name="status">
+          <option value="">Active</option>
+          {% for status in item_statuses %}
+            <option value="{{ status.value }}" {{ "selected" if selected_status == status.value else "" }}>{{ status.value }}</option>
+          {% endfor %}
+        </select>
+        <select class="input" name="category_id">
+          <option value="0">All categories</option>
+          {% for category in categories %}
+            <option value="{{ category.id }}" {{ "selected" if selected_category_id == category.id else "" }}>{{ category.name }}</option>
+          {% endfor %}
+        </select>
+        <select class="input" name="account_id">
+          <option value="0">All accounts</option>
+          {% for account in accounts %}
+            <option value="{{ account.id }}" {{ "selected" if selected_account_id == account.id else "" }}>{{ account.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-row sort-row">
+        <select class="input" name="sort_by">
+          <option value="rank" {{ "selected" if selected_sort_by == "rank" else "" }}>Sort: rank</option>
+          <option value="max_price" {{ "selected" if selected_sort_by == "max_price" else "" }}>Sort: max price</option>
+          <option value="actual_price" {{ "selected" if selected_sort_by == "actual_price" else "" }}>Sort: actual price</option>
+        </select>
+        <input type="hidden" name="sort_dir" value="{{ selected_sort_dir }}">
+        <button class="button secondary sort-dir-button" type="button" onclick="this.form.sort_dir.value='{{ next_sort_dir }}'; this.form.submit();">
+          {{ "↑ Asc" if selected_sort_dir == "asc" else "↓ Desc" }}
+        </button>
+      </div>
+      <div class="filter-actions">
+        <label class="toggle-card">
+          <input type="checkbox" name="show_sum" value="true" onchange="this.form.submit()" {{ "checked" if show_sum else "" }}>
+          <span>Show sum</span>
+        </label>
+        <button class="button secondary" type="submit">Apply filters</button>
+      </div>
+    </form>
+  </details>
 
   {% if show_sum %}
     <section class="panel filter-summary">

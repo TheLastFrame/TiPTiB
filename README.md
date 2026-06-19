@@ -14,6 +14,14 @@ TiPTiB is a small self-hosted app for wishlists, buy plans, priority ranking, ma
 - Mobile-first responsive UI with installable PWA shell.
 - SQLite by default, PostgreSQL-ready through `TIPTIB_DATABASE_URL`.
 
+## Sorting Rules
+
+Wishlist item sorting uses explicit price fallbacks:
+
+- `max price`: max, then average, then actual, then min.
+- `actual price`: actual, then average, then min, then max.
+- `rank`: manual rank.
+
 ## Run Locally
 
 ```powershell
