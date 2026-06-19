@@ -9,57 +9,65 @@
     </div>
   </section>
 
-  <section class="grid dashboard-grid">
-    <div class="stack">
-      <article class="panel stack">
-        <div class="row wrap"><h2>Savings</h2><strong>{{ saved|money }} / {{ target|money }}</strong></div>
-        <div class="progress"><span style="--value: {{ progress }}%"></span></div>
-        <form class="form" method="post" action="/items/{{ item.id }}/savings">
-          <div class="grid two">
-            <div class="field"><label>Amount</label><input class="input" name="amount" inputmode="decimal" required></div>
-            <div class="field">
-              <label>Account</label>
-              <select class="input" name="account_id">
-                <option value="0">No account</option>
-                {% for account in accounts %}<option value="{{ account.id }}">{{ account.name }}</option>{% endfor %}
-              </select>
-            </div>
-          </div>
-          <input class="input" name="note" placeholder="Optional note">
-          <button class="button" type="submit">Add virtual deposit</button>
-        </form>
-      </article>
+  <nav class="tabs" aria-label="Item sections">
+    <a class="tab {{ 'active' if selected_tab == 'overview' else '' }}" href="/items/{{ item.id }}?tab=overview">Overview</a>
+    <a class="tab {{ 'active' if selected_tab == 'budget' else '' }}" href="/items/{{ item.id }}?tab=budget">Budget</a>
+    <a class="tab {{ 'active' if selected_tab == 'details' else '' }}" href="/items/{{ item.id }}?tab=details">Details</a>
+  </nav>
 
-      <article class="panel stack">
-        <h2>Recurring deposit</h2>
-        <form class="form" method="post" action="/items/{{ item.id }}/recurring-rule">
-          <div class="grid two">
-            <div class="field"><label>Amount</label><input class="input" name="amount" value="{{ item.savings_rule.amount if item.savings_rule else '' }}" inputmode="decimal" required></div>
-            <div class="field">
-              <label>Cadence</label>
-              <select class="input" name="cadence">
-                {% for cadence in cadences %}
-                  <option value="{{ cadence.value }}" {{ "selected" if item.savings_rule and item.savings_rule.cadence == cadence else "" }}>{{ cadence.value }}</option>
-                {% endfor %}
-              </select>
+  {% if selected_tab == "budget" %}
+    <section class="grid dashboard-grid">
+      <div class="stack">
+        <article class="panel stack">
+          <div class="row wrap"><h2>Savings</h2><strong>{{ saved|money }} / {{ target|money }}</strong></div>
+          <div class="progress"><span style="--value: {{ progress }}%"></span></div>
+          <form class="form" method="post" action="/items/{{ item.id }}/savings">
+            <div class="grid two">
+              <div class="field"><label>Amount</label><input class="input" name="amount" inputmode="decimal" required></div>
+              <div class="field">
+                <label>Account</label>
+                <select class="input" name="account_id">
+                  <option value="0">No account</option>
+                  {% for account in accounts %}<option value="{{ account.id }}">{{ account.name }}</option>{% endfor %}
+                </select>
+              </div>
             </div>
-            <div class="field">
-              <label>Account</label>
-              <select class="input" name="account_id">
-                <option value="0">No account</option>
-                {% for account in accounts %}
-                  <option value="{{ account.id }}" {{ "selected" if item.savings_rule and item.savings_rule.account_id == account.id else "" }}>{{ account.name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="field"><label>Next run</label><input class="input" name="next_run_at" type="datetime-local"></div>
-          </div>
-          <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="active" checked> Active</label>
-          <button class="button secondary" type="submit">Save recurring rule</button>
-        </form>
-      </article>
+            <input class="input" name="note" placeholder="Optional note">
+            <button class="button" type="submit">Add virtual deposit</button>
+          </form>
+        </article>
 
-      <article class="panel stack">
+        <article class="panel stack">
+          <h2>Recurring deposit</h2>
+          <form class="form" method="post" action="/items/{{ item.id }}/recurring-rule">
+            <div class="grid two">
+              <div class="field"><label>Amount</label><input class="input" name="amount" value="{{ item.savings_rule.amount if item.savings_rule else '' }}" inputmode="decimal" required></div>
+              <div class="field">
+                <label>Cadence</label>
+                <select class="input" name="cadence">
+                  {% for cadence in cadences %}
+                    <option value="{{ cadence.value }}" {{ "selected" if item.savings_rule and item.savings_rule.cadence == cadence else "" }}>{{ cadence.value }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="field">
+                <label>Account</label>
+                <select class="input" name="account_id">
+                  <option value="0">No account</option>
+                  {% for account in accounts %}
+                    <option value="{{ account.id }}" {{ "selected" if item.savings_rule and item.savings_rule.account_id == account.id else "" }}>{{ account.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="field"><label>Next run</label><input class="input" name="next_run_at" type="datetime-local"></div>
+            </div>
+            <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="active" checked> Active</label>
+            <button class="button secondary" type="submit">Save recurring rule</button>
+          </form>
+        </article>
+      </div>
+
+      <aside class="panel stack">
         <h2>Savings history</h2>
         {% for entry in item.savings_entries|sort(attribute="created_at", reverse=true) %}
           <div class="row">
@@ -71,29 +79,29 @@
         {% else %}
           <p>No deposits yet.</p>
         {% endfor %}
-      </article>
-    </div>
-
-    <aside class="panel">
+      </aside>
+    </section>
+  {% elif selected_tab == "details" %}
+    <section class="panel">
       <form class="form" method="post" action="/items/{{ item.id }}">
         <h2>Item details</h2>
         <input type="hidden" name="wishlist_id" value="{{ item.wishlist_id }}">
-        <div class="field"><label>Title</label><input class="input" name="title" value="{{ item.title }}" required></div>
-        <div class="field"><label>Rank</label><input class="input" name="rank" type="number" value="{{ item.rank }}"></div>
-        <div class="field">
-          <label>Status</label>
-          <select class="input" name="status">
-            {% for status in item_statuses %}<option value="{{ status.value }}" {{ "selected" if item.status == status else "" }}>{{ status.value }}</option>{% endfor %}
-          </select>
-        </div>
-        <div class="field">
-          <label>Category</label>
-          <select class="input" name="category_id">
-            <option value="0">No category</option>
-            {% for category in categories %}<option value="{{ category.id }}" {{ "selected" if item.category_id == category.id else "" }}>{{ category.name }}</option>{% endfor %}
-          </select>
-        </div>
         <div class="grid two">
+          <div class="field"><label>Title</label><input class="input" name="title" value="{{ item.title }}" required></div>
+          <div class="field"><label>Rank</label><input class="input" name="rank" type="number" value="{{ item.rank }}"></div>
+          <div class="field">
+            <label>Status</label>
+            <select class="input" name="status">
+              {% for status in item_statuses %}<option value="{{ status.value }}" {{ "selected" if item.status == status else "" }}>{{ status.value }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Category</label>
+            <select class="input" name="category_id">
+              <option value="0">No category</option>
+              {% for category in categories %}<option value="{{ category.id }}" {{ "selected" if item.category_id == category.id else "" }}>{{ category.name }}</option>{% endfor %}
+            </select>
+          </div>
           <div class="field"><label>Min</label><input class="input" name="price_min" value="{{ item.price_min or '' }}"></div>
           <div class="field"><label>Avg</label><input class="input" name="price_avg" value="{{ item.price_avg or '' }}"></div>
           <div class="field"><label>Max</label><input class="input" name="price_max" value="{{ item.price_max or '' }}"></div>
@@ -103,6 +111,44 @@
         <div class="field"><label>Notes</label><textarea class="input" name="notes">{{ item.notes or '' }}</textarea></div>
         <button class="button" type="submit">Save item</button>
       </form>
-    </aside>
-  </section>
+    </section>
+  {% else %}
+    <section class="stack">
+      <div class="stack">
+        <article class="panel stack">
+          <div class="row wrap">
+            <h2>Plan</h2>
+            {% if item.status.value in ["saving", "ready"] %}
+              <span class="pill">{{ progress }}% saved</span>
+            {% endif %}
+          </div>
+          {% if item.status.value in ["saving", "ready"] %}
+            <div class="progress"><span style="--value: {{ progress }}%"></span></div>
+          {% endif %}
+          <div class="grid two">
+            <div class="card"><span class="eyebrow">Target</span><strong>{{ target|money }}</strong></div>
+            {% if item.status.value in ["saving", "ready"] %}
+              <div class="card"><span class="eyebrow">Saved</span><strong>{{ saved|money }}</strong></div>
+            {% endif %}
+            <div class="card"><span class="eyebrow">Rank</span><strong>#{{ item.rank }}</strong></div>
+            <div class="card"><span class="eyebrow">Category</span><strong>{{ item.category.name if item.category else "None" }}</strong></div>
+          </div>
+          <div class="row wrap">
+            {% if item.status.value in ["saving", "ready"] %}
+              <a class="button secondary" href="/items/{{ item.id }}?tab=budget">Open budget</a>
+            {% endif %}
+            <a class="button ghost" href="/items/{{ item.id }}?tab=details">Edit details</a>
+          </div>
+        </article>
+
+        {% if item.notes or item.url %}
+          <article class="panel stack">
+            <h2>Notes</h2>
+            {% if item.notes %}<p>{{ item.notes }}</p>{% endif %}
+            {% if item.url %}<a class="button ghost" href="{{ item.url }}" target="_blank" rel="noreferrer">Open link</a>{% endif %}
+          </article>
+        {% endif %}
+      </div>
+    </section>
+  {% endif %}
 {% endblock %}

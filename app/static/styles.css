@@ -71,6 +71,26 @@ p { color: var(--muted); margin: 0; line-height: 1.5; }
   background: #eee8dc;
 }
 .progress span { display: block; height: 100%; width: var(--value, 0%); background: linear-gradient(90deg, var(--brand), var(--accent)); }
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 253, 248, .78);
+}
+.tab {
+  min-height: 42px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-weight: 700;
+}
+.tab.active { background: var(--brand); color: white; }
 .form { display: grid; gap: 12px; }
 .field { display: grid; gap: 6px; }
 .field label { color: var(--muted); font-size: .86rem; }

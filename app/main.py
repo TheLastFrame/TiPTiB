@@ -419,10 +419,12 @@ def item_detail(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
     item_id: int,
+    tab: str = "overview",
 ):
     item = scoped_item(db, user, item_id)
     saved = item_saved_total(db, item.id)
     target = item_target(item)
+    selected_tab = tab if tab in {"overview", "budget", "details"} else "overview"
     return render(
         request,
         "item_detail.html",
@@ -430,6 +432,7 @@ def item_detail(
         | {
             "active": "lists",
             "item": item,
+            "selected_tab": selected_tab,
             "saved": saved,
             "target": target,
             "progress": progress_percent(saved, target),
@@ -492,7 +495,7 @@ def create_savings_entry(
         kind=SavingsEntryKind.manual,
         note=note.strip() or None,
     )
-    return redirect(f"/items/{item.id}")
+    return redirect(f"/items/{item.id}?tab=budget")
 
 
 @app.post("/items/{item_id}/recurring-rule")
@@ -520,7 +523,7 @@ def upsert_recurring_rule(
     item.status = ItemStatus.saving if item.status in (ItemStatus.idea, ItemStatus.planned) else item.status
     db.add(rule)
     db.commit()
-    return redirect(f"/items/{item.id}")
+    return redirect(f"/items/{item.id}?tab=budget")
 
 
 @app.post("/categories")

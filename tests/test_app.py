@@ -63,6 +63,18 @@ def test_setup_login_create_item_and_pwa_routes():
         assert response.status_code == 200
         assert "Dining table" in response.text
 
+        item_url = response = client.get("/items/1")
+        assert item_url.status_code == 200
+        assert "Overview" in item_url.text
+        assert "Open budget" not in item_url.text
+        assert "0% saved" not in item_url.text
+        budget_response = client.get("/items/1?tab=budget")
+        assert budget_response.status_code == 200
+        assert "Recurring deposit" in budget_response.text
+        details_response = client.get("/items/1?tab=details")
+        assert details_response.status_code == 200
+        assert "Save item" in details_response.text
+
         assert client.get("/manifest.webmanifest").json()["short_name"] == "TiPTiB"
         assert client.get("/static/sw.js").status_code == 200
 
