@@ -627,7 +627,7 @@ def manifest() -> dict[str, object]:
         "description": "Today I plan, Tomorrow I buy.",
         "start_url": "/dashboard",
         "display": "standalone",
-        "background_color": "#f8f5ef",
-        "theme_color": "#68715a",
+        "background_color": "#f3fbf6",
+        "theme_color": "#0f766e",
         "icons": [{"src": "/static/icons/icon.svg", "sizes": "any", "type": "image/svg+xml"}],
     }

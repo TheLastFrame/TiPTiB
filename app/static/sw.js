@@ -1,4 +1,4 @@
-const CACHE_NAME = "tiptib-static-v1";
+const CACHE_NAME = "tiptib-static-v2";
 const STATIC_ASSETS = ["/static/styles.css", "/static/icons/icon.svg"];
 
 self.addEventListener("install", (event) => {
