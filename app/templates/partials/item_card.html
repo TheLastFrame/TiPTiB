@@ -1,8 +1,8 @@
-<article class="card">
+<a class="card card-link" href="/items/{{ card.item.id }}" aria-label="Open {{ card.item.title }}">
   <div class="row">
     <div>
       <div class="eyebrow">#{{ card.item.rank }}{% if card.item.category %} · {{ card.item.category.name }}{% endif %}</div>
-      <h3><a href="/items/{{ card.item.id }}">{{ card.item.title }}</a></h3>
+      <h3>{{ card.item.title }}</h3>
     </div>
     <span class="pill status-{{ card.item.status.value }}">{{ card.item.status.value }}</span>
   </div>
@@ -21,4 +21,4 @@
       {% endif %}
     </div>
   </div>
-</article>
+</a>

@@ -43,6 +43,7 @@ def test_setup_login_create_item_and_pwa_routes():
         response = client.get("/lists")
         assert response.status_code == 200
         assert "Your plans" in response.text
+        assert 'href="/lists/1"' in response.text
 
         response = client.post(
             "/items",
@@ -73,6 +74,7 @@ def test_setup_login_create_item_and_pwa_routes():
         response = client.get("/lists/1")
         assert response.status_code == 200
         assert "Dining table" in response.text
+        assert 'href="/items/2"' in response.text
 
         item_url = response = client.get("/items/1")
         assert item_url.status_code == 200

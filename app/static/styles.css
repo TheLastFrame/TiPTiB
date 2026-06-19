@@ -44,6 +44,16 @@ p { color: var(--muted); margin: 0; line-height: 1.5; }
 .stat, .panel, .card { padding: 16px; }
 .stat strong { display: block; font-size: 1.15rem; margin-top: 4px; }
 .card { display: grid; gap: 12px; }
+.card-link {
+  cursor: pointer;
+  transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+.card-link:hover, .card-link:focus-visible {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+  box-shadow: 0 18px 44px rgba(49, 45, 35, 0.1);
+  outline: none;
+}
+.card-link:active { transform: translateY(1px); }
 .row { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 .wrap { flex-wrap: wrap; }
 .muted { color: var(--muted); }
