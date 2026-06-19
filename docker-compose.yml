@@ -1,0 +1,27 @@
+services:
+  tiptib:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      TIPTIB_DATABASE_URL: sqlite:////app/data/tiptib.db
+      TIPTIB_SECRET_KEY: ${TIPTIB_SECRET_KEY:-change-this-secret}
+      TIPTIB_DEFAULT_CURRENCY: ${TIPTIB_DEFAULT_CURRENCY:-EUR}
+      TIPTIB_DEFAULT_TIMEZONE: ${TIPTIB_DEFAULT_TIMEZONE:-Europe/Vienna}
+    volumes:
+      - tiptib-data:/app/data
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_DB: tiptib
+      POSTGRES_USER: tiptib
+      POSTGRES_PASSWORD: tiptib
+    volumes:
+      - tiptib-postgres:/var/lib/postgresql/data
+
+volumes:
+  tiptib-data:
+  tiptib-postgres:

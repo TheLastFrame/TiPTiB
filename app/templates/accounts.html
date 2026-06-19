@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Accounts · TiPTiB{% endblock %}
+{% block content %}
+  <section class="hero">
+    <span class="eyebrow">Real-world labels</span>
+    <h1>Saving accounts</h1>
+    <p>Track where money is meant to sit without managing bank balances.</p>
+  </section>
+
+  <section class="grid two">
+    {% for row in rows %}
+      <article class="card">
+        <div class="row">
+          <div>
+            <h2>{{ row.account.name }}</h2>
+            <p>{{ "Default" if row.account.is_default else "Named account" }}{% if row.account.archived %} · archived{% endif %}</p>
+          </div>
+          <strong>{{ row.total|money }}</strong>
+        </div>
+        <form class="form" method="post" action="/accounts/{{ row.account.id }}">
+          <input class="input" name="name" value="{{ row.account.name }}" required>
+          <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="is_default" {{ "checked" if row.account.is_default else "" }}> Default</label>
+          <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="archived" {{ "checked" if row.account.archived else "" }}> Archived</label>
+          <button class="button secondary" type="submit">Save account</button>
+        </form>
+      </article>
+    {% endfor %}
+  </section>
+
+  <section class="panel" style="margin-top: 16px;">
+    <form class="form" method="post" action="/accounts">
+      <h2>Add account</h2>
+      <input class="input" name="name" placeholder="ING Savings" required>
+      <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="is_default"> Default</label>
+      <button class="button" type="submit">Create account</button>
+    </form>
+  </section>
+{% endblock %}

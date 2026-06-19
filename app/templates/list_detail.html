@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ wishlist.name }} · TiPTiB{% endblock %}
+{% block content %}
+  <section class="hero">
+    <span class="eyebrow">Wishlist</span>
+    <div class="row wrap">
+      <h1>{{ wishlist.name }}</h1>
+      <a class="button secondary" href="/items/new?wishlist_id={{ wishlist.id }}">Add</a>
+    </div>
+    {% if wishlist.description %}<p>{{ wishlist.description }}</p>{% endif %}
+  </section>
+
+  <form class="filters" method="get" action="/lists/{{ wishlist.id }}">
+    <select class="input" name="status">
+      <option value="">Active</option>
+      {% for status in item_statuses %}
+        <option value="{{ status.value }}" {{ "selected" if selected_status == status.value else "" }}>{{ status.value }}</option>
+      {% endfor %}
+    </select>
+    <select class="input" name="category_id">
+      <option value="0">All categories</option>
+      {% for category in categories %}
+        <option value="{{ category.id }}" {{ "selected" if selected_category_id == category.id else "" }}>{{ category.name }}</option>
+      {% endfor %}
+    </select>
+    <select class="input" name="account_id">
+      <option value="0">All accounts</option>
+      {% for account in accounts %}
+        <option value="{{ account.id }}" {{ "selected" if selected_account_id == account.id else "" }}>{{ account.name }}</option>
+      {% endfor %}
+    </select>
+    <button class="button secondary" type="submit">Filter</button>
+  </form>
+
+  <section class="grid two" style="margin-top: 16px;">
+    {% for card in item_cards %}
+      {% include "partials/item_card.html" %}
+    {% else %}
+      <article class="panel empty"><p>No items match this view.</p></article>
+    {% endfor %}
+  </section>
+{% endblock %}

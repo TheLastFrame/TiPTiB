@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Lists · TiPTiB{% endblock %}
+{% block content %}
+  <section class="hero">
+    <span class="eyebrow">Wishlists</span>
+    <h1>Your plans</h1>
+    <p>Separate gadgets, moving house, furniture, and all the “not today, but soon” things.</p>
+  </section>
+
+  <section class="grid two">
+    {% for row in rows %}
+      <article class="card">
+        <div class="row">
+          <div>
+            <h2><a href="/lists/{{ row.wishlist.id }}">{{ row.wishlist.name }}</a></h2>
+            <p>{{ row.item_count }} active items</p>
+          </div>
+          <span class="pill">{{ row.progress }}%</span>
+        </div>
+        <div class="progress"><span style="--value: {{ row.progress }}%"></span></div>
+        <div class="row"><span>{{ row.total|money }} planned</span><strong>{{ row.saved|money }}</strong></div>
+      </article>
+    {% endfor %}
+  </section>
+
+  <section class="panel" style="margin-top: 16px;">
+    <form class="form" method="post" action="/lists">
+      <h2>Add wishlist</h2>
+      <input class="input" name="name" placeholder="Moving House" required>
+      <input class="input" name="description" placeholder="Optional note">
+      <button class="button" type="submit">Create list</button>
+    </form>
+  </section>
+{% endblock %}

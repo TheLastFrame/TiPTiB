@@ -1,0 +1,21 @@
+{% extends "auth_base.html" %}
+{% block title %}Log in · TiPTiB{% endblock %}
+{% block content %}
+  <div class="stack">
+    <span class="eyebrow">TiPTiB</span>
+    <h1>Welcome back</h1>
+    <p>Plan wishes, track priorities, and keep virtual savings tidy.</p>
+  </div>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form class="form" method="post" action="/login">
+    <div class="field">
+      <label for="username">Username</label>
+      <input class="input" id="username" name="username" required autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input class="input" id="password" name="password" type="password" required autocomplete="current-password">
+    </div>
+    <button class="button" type="submit">Log in</button>
+  </form>
+{% endblock %}

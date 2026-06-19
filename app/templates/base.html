@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#68715a">
+    <title>{% block title %}TiPTiB{% endblock %}</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/static/icons/icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <div class="page">
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+    <nav class="bottom-nav" aria-label="Primary">
+      <a class="nav-item {{ 'active' if active == 'dashboard' else '' }}" href="/dashboard">Today</a>
+      <a class="nav-item {{ 'active' if active == 'lists' else '' }}" href="/lists">Lists</a>
+      <a class="nav-item nav-add {{ 'active' if active == 'add' else '' }}" href="/items/new">Add</a>
+      <a class="nav-item {{ 'active' if active == 'accounts' else '' }}" href="/accounts">Accounts</a>
+      <a class="nav-item {{ 'active' if active == 'settings' else '' }}" href="/settings">Settings</a>
+    </nav>
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/static/sw.js");
+      }
+    </script>
+  </body>
+</html>

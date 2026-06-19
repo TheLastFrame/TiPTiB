@@ -1,0 +1,24 @@
+{% extends "auth_base.html" %}
+{% block title %}Set up TiPTiB{% endblock %}
+{% block content %}
+  <div class="stack">
+    <span class="eyebrow">Today I plan, Tomorrow I buy</span>
+    <h1>Set up TiPTiB</h1>
+    <p>Create the first admin user for this self-hosted instance.</p>
+  </div>
+  <form class="form" method="post" action="/setup">
+    <div class="field">
+      <label for="display_name">Display name</label>
+      <input class="input" id="display_name" name="display_name" autocomplete="name">
+    </div>
+    <div class="field">
+      <label for="username">Username</label>
+      <input class="input" id="username" name="username" required autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input class="input" id="password" name="password" type="password" required autocomplete="new-password">
+    </div>
+    <button class="button" type="submit">Create account</button>
+  </form>
+{% endblock %}

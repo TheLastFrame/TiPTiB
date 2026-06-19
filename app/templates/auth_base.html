@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}TiPTiB{% endblock %}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="auth-page">
+      <section class="auth-card stack">
+        {% block content %}{% endblock %}
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Add item · TiPTiB{% endblock %}
+{% block content %}
+  <section class="hero">
+    <span class="eyebrow">New wish</span>
+    <h1>Add a plan</h1>
+  </section>
+  <section class="panel">
+    <form class="form" method="post" action="/items">
+      <div class="grid two">
+        <div class="field">
+          <label>Title</label>
+          <input class="input" name="title" required placeholder="Dining table">
+        </div>
+        <div class="field">
+          <label>Wishlist</label>
+          <select class="input" name="wishlist_id" required>
+            {% for wishlist in wishlists %}
+              <option value="{{ wishlist.id }}" {{ "selected" if wishlist_id == wishlist.id else "" }}>{{ wishlist.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Category</label>
+          <select class="input" name="category_id">
+            <option value="0">No category</option>
+            {% for category in categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <select class="input" name="status">
+            {% for status in item_statuses %}<option value="{{ status.value }}">{{ status.value }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field"><label>Min price</label><input class="input" name="price_min" inputmode="decimal"></div>
+        <div class="field"><label>Average price</label><input class="input" name="price_avg" inputmode="decimal"></div>
+        <div class="field"><label>Max price</label><input class="input" name="price_max" inputmode="decimal"></div>
+        <div class="field"><label>Link</label><input class="input" name="url" type="url"></div>
+      </div>
+      <div class="field"><label>Notes</label><textarea class="input" name="notes"></textarea></div>
+      <button class="button" type="submit">Create item</button>
+    </form>
+  </section>
+{% endblock %}

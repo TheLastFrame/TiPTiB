@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · TiPTiB{% endblock %}
+{% block content %}
+  <section class="hero">
+    <span class="eyebrow">Hi {{ user.display_name }}</span>
+    <h1>Today’s buy plan</h1>
+    <p>Keep wishes calm, ranked, and funded before tomorrow shows up.</p>
+  </section>
+
+  <section class="stats">
+    <article class="stat panel"><span class="eyebrow">Planned</span><strong>{{ planned_total|money }}</strong></article>
+    <article class="stat panel"><span class="eyebrow">Virtually saved</span><strong>{{ saved_total|money }}</strong></article>
+    <article class="stat panel"><span class="eyebrow">Ready</span><strong>{{ ready_count }}</strong></article>
+  </section>
+
+  <section class="grid dashboard-grid" style="margin-top: 16px;">
+    <div class="stack">
+      <div class="row">
+        <h2>Ready soon</h2>
+        <a class="button secondary" href="/items/new">Add item</a>
+      </div>
+      {% for item in ready_items %}
+        <article class="card">
+          <div class="row">
+            <h3><a href="/items/{{ item.id }}">{{ item.title }}</a></h3>
+            <span class="pill status-ready">ready</span>
+          </div>
+        </article>
+      {% else %}
+        <article class="panel empty"><p>No ready items yet. The calm before the very responsible purchase.</p></article>
+      {% endfor %}
+
+      <h2>Recently touched</h2>
+      {% for item in recent_items %}
+        <article class="card">
+          <div class="row">
+            <div>
+              <span class="eyebrow">{{ item.wishlist.name if item.wishlist else "Wishlist" }}</span>
+              <h3><a href="/items/{{ item.id }}">{{ item.title }}</a></h3>
+            </div>
+            <span class="pill status-{{ item.status.value }}">{{ item.status.value }}</span>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+
+    <aside class="stack">
+      <section class="panel stack">
+        <div class="row"><h2>Saved by account</h2><a href="/accounts">Manage</a></div>
+        {% for name, total in account_breakdown %}
+          <div class="row"><span class="chip">{{ name }}</span><strong>{{ total|money }}</strong></div>
+        {% else %}
+          <p>No accounts yet.</p>
+        {% endfor %}
+      </section>
+      <section class="panel stack">
+        <h2>Upcoming deposits</h2>
+        {% for rule in upcoming_rules %}
+          <div class="row">
+            <div>
+              <strong>{{ rule.item.title }}</strong>
+              <p>{{ rule.cadence.value }} · {{ rule.account.name if rule.account else "No account" }}</p>
+            </div>
+            <span>{{ rule.amount|money }}</span>
+          </div>
+        {% else %}
+          <p>No recurring deposits yet.</p>
+        {% endfor %}
+      </section>
+    </aside>
+  </section>
+{% endblock %}

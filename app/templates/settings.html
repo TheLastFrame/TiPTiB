@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Settings · TiPTiB{% endblock %}
+{% block content %}
+  <section class="hero">
+    <span class="eyebrow">Instance settings</span>
+    <h1>Settings</h1>
+    <p>{{ settings.default_currency }} · {{ settings.default_timezone }}</p>
+  </section>
+
+  <section class="grid two">
+    <article class="panel">
+      <form class="form" method="post" action="/categories">
+        <h2>Categories</h2>
+        {% for category in categories %}
+          <div class="row"><span class="chip" style="border-left: 4px solid {{ category.color }}">{{ category.name }}</span></div>
+        {% else %}
+          <p>No categories yet.</p>
+        {% endfor %}
+        <input class="input" name="name" placeholder="Furniture" required>
+        <input class="input" name="color" type="color" value="#8b8f78">
+        <button class="button secondary" type="submit">Add category</button>
+      </form>
+    </article>
+
+    <article class="panel">
+      <form class="form" method="post" action="/settings/users">
+        <h2>Add user</h2>
+        {% if not user.is_admin %}<p>Only admins can add users.</p>{% endif %}
+        <input class="input" name="display_name" placeholder="Display name" {{ "disabled" if not user.is_admin else "" }}>
+        <input class="input" name="username" placeholder="Username" required {{ "disabled" if not user.is_admin else "" }}>
+        <input class="input" name="password" type="password" placeholder="Password" required {{ "disabled" if not user.is_admin else "" }}>
+        <button class="button secondary" type="submit" {{ "disabled" if not user.is_admin else "" }}>Create private user</button>
+      </form>
+    </article>
+
+    <article class="panel">
+      <form class="form" method="post" action="/logout">
+        <h2>Session</h2>
+        <p>Signed in as {{ user.username }}.</p>
+        <button class="button ghost" type="submit">Log out</button>
+      </form>
+    </article>
+  </section>
+{% endblock %}
