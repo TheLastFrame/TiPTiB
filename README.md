@@ -1,5 +1,8 @@
 # TiPTiB
 
+[![tests](https://github.com/TheLastFrame/TiPTiB/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/TheLastFrame/TiPTiB/actions/workflows/tests.yml)
+[![container](https://github.com/TheLastFrame/TiPTiB/actions/workflows/container.yml/badge.svg?branch=master)](https://github.com/TheLastFrame/TiPTiB/actions/workflows/container.yml)
+
 Today I plan, Tomorrow I buy.
 
 TiPTiB is a small self-hosted app for wishlists, buy plans, priority ranking, manual price estimates, and virtual savings. It is intentionally not a banking or accounting app: saving accounts are just labels for where money is meant to sit in the real world.
