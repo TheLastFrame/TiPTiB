@@ -14,6 +14,9 @@
     <div class="progress" aria-label="Savings progress"><span style="--value: {{ card.progress }}%"></span></div>
     <div class="row wrap">
       <span class="chip">Range {{ card.item.price_min|money }} - {{ card.item.price_max|money }}</span>
+      {% if card.item.amount > 1 %}
+        <span class="chip">Amount {{ card.item.amount }}</span>
+      {% endif %}
       {% if card.item.savings_entries and card.item.savings_entries[-1].account %}
         <span class="chip">{{ card.item.savings_entries[-1].account.name }}</span>
       {% elif card.item.savings_rule and card.item.savings_rule.account %}

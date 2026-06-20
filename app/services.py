@@ -36,6 +36,11 @@ def item_saved_total(db: Session, item_id: int) -> Decimal:
 
 
 def item_target(item: Item) -> Decimal:
+    amount = max(1, int(item.amount or 1))
+    return item_unit_price(item) * amount
+
+
+def item_unit_price(item: Item) -> Decimal:
     return money(item.actual_price or item.price_avg or item.price_max or item.price_min)
 
 

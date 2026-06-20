@@ -112,7 +112,9 @@
           <div class="field"><label>Avg</label><input class="input" name="price_avg" value="{{ values.get('price_avg', item.price_avg or '') if error_form == 'details' else item.price_avg or '' }}"></div>
           <div class="field"><label>Max</label><input class="input" name="price_max" value="{{ values.get('price_max', item.price_max or '') if error_form == 'details' else item.price_max or '' }}"></div>
           <div class="field"><label>Actual</label><input class="input" name="actual_price" value="{{ values.get('actual_price', item.actual_price or '') if error_form == 'details' else item.actual_price or '' }}"></div>
+          <div class="field"><label>Amount</label><input class="input" name="amount" type="number" min="1" step="1" value="{{ values.get('amount', item.amount) if error_form == 'details' else item.amount }}"></div>
         </div>
+        <div class="field"><label>Reason</label><textarea class="input" name="reason">{{ values.get('reason', item.reason or '') if error_form == 'details' else item.reason or '' }}</textarea></div>
         <div class="field"><label>Link</label><input class="input" name="url" value="{{ values.get('url', item.url or '') if error_form == 'details' else item.url or '' }}"></div>
         <div class="field"><label>Notes</label><textarea class="input" name="notes">{{ values.get('notes', item.notes or '') if error_form == 'details' else item.notes or '' }}</textarea></div>
         <button class="button" type="submit">Save item</button>
@@ -133,11 +135,17 @@
           {% endif %}
           <div class="grid two">
             <div class="card"><span class="eyebrow">Target</span><strong>{{ target|money }}</strong></div>
+            {% if item.amount > 1 %}
+              <div class="card"><span class="eyebrow">Single price</span><strong>{{ unit_price|money }}</strong></div>
+            {% endif %}
             {% if item.status.value in ["saving", "ready"] %}
               <div class="card"><span class="eyebrow">Saved</span><strong>{{ saved|money }}</strong></div>
             {% endif %}
             <div class="card"><span class="eyebrow">Rank</span><strong>#{{ item.rank }}</strong></div>
             <div class="card"><span class="eyebrow">Category</span><strong>{{ item.category.name if item.category else "None" }}</strong></div>
+            {% if item.amount > 1 %}
+              <div class="card"><span class="eyebrow">Amount</span><strong>{{ item.amount }}</strong></div>
+            {% endif %}
           </div>
           <div class="row wrap">
             {% if item.status.value in ["saving", "ready"] %}
@@ -146,6 +154,13 @@
             <a class="button ghost" href="/items/{{ item.id }}?tab=details">Edit details</a>
           </div>
         </article>
+
+        {% if item.reason %}
+          <article class="panel stack">
+            <h2>Reason</h2>
+            <p>{{ item.reason }}</p>
+          </article>
+        {% endif %}
 
         {% if item.notes or item.url %}
           <article class="panel stack">

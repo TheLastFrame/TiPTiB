@@ -38,8 +38,10 @@
         <div class="field"><label>Min price</label><input class="input" name="price_min" inputmode="decimal" value="{{ values.get('price_min', '') }}"></div>
         <div class="field"><label>Average price</label><input class="input" name="price_avg" inputmode="decimal" value="{{ values.get('price_avg', '') }}"></div>
         <div class="field"><label>Max price</label><input class="input" name="price_max" inputmode="decimal" value="{{ values.get('price_max', '') }}"></div>
+        <div class="field"><label>Amount</label><input class="input" name="amount" type="number" min="1" step="1" value="{{ values.get('amount', '') }}"></div>
         <div class="field"><label>Link</label><input class="input" name="url" type="url" value="{{ values.get('url', '') }}"></div>
       </div>
+      <div class="field"><label>Reason</label><textarea class="input" name="reason">{{ values.get('reason', '') }}</textarea></div>
       <div class="field"><label>Notes</label><textarea class="input" name="notes">{{ values.get('notes', '') }}</textarea></div>
       <button class="button" type="submit">Create item</button>
     </form>

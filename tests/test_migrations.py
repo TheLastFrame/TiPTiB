@@ -20,3 +20,5 @@ def test_alembic_can_upgrade_fresh_sqlite_database(tmp_path: Path):
     assert {"currency", "timezone"}.issubset(user_columns)
     wishlist_columns = {column["name"] for column in inspector.get_columns("wishlists")}
     assert "archived" in wishlist_columns
+    item_columns = {column["name"] for column in inspector.get_columns("items")}
+    assert {"reason", "amount"}.issubset(item_columns)

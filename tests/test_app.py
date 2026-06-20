@@ -119,6 +119,8 @@ def test_setup_login_create_item_and_pwa_routes():
                     "price_min": "300",
                     "price_avg": "450",
                     "price_max": "700",
+                    "amount": "2",
+                    "reason": "Big enough for dinner with friends",
                 },
             ),
             follow_redirects=False,
@@ -190,18 +192,18 @@ def test_setup_login_create_item_and_pwa_routes():
         response = client.get("/lists/1?show_sum=true")
         assert response.status_code == 200
         assert "Filtered sum" in response.text
-        assert "1 539.00 EUR" in response.text
+        assert "1 989.00 EUR" in response.text
 
         response = client.get("/lists/1?status=planned&show_sum=true")
         assert response.status_code == 200
         assert "4/5 shown" in response.text
-        assert "540.00 EUR" in response.text
+        assert "990.00 EUR" in response.text
         assert "999.00 EUR" not in response.text
 
         response = client.get("/lists/1?status=planned&sort_by=max_price&sort_dir=desc")
         assert response.status_code == 200
-        assert response.text.index("Actual-first shelf") < response.text.index("Dining table")
-        assert response.text.index("Dining table") < response.text.index("Fallback speaker")
+        assert response.text.index("Dining table") < response.text.index("Actual-first shelf")
+        assert response.text.index("Actual-first shelf") < response.text.index("Fallback speaker")
 
         response = client.get("/lists/1?status=planned&sort_by=max_price&sort_dir=asc")
         assert response.status_code == 200
@@ -222,12 +224,20 @@ def test_setup_login_create_item_and_pwa_routes():
         assert 'data-back-button aria-label="Go back"' in item_url.text
         assert "Open budget" not in item_url.text
         assert "0% saved" not in item_url.text
+        assert "Amount</span>" not in item_url.text
         budget_response = client.get("/items/1?tab=budget")
         assert budget_response.status_code == 200
         assert "Recurring deposit" in budget_response.text
         details_response = client.get("/items/1?tab=details")
         assert details_response.status_code == 200
         assert "Save item" in details_response.text
+
+        item_url = client.get("/items/2")
+        assert item_url.status_code == 200
+        assert "900.00 EUR" in item_url.text
+        assert "Single price</span><strong>450.00 EUR</strong>" in item_url.text
+        assert "Big enough for dinner with friends" in item_url.text
+        assert "Amount</span><strong>2</strong>" in item_url.text
 
         token = csrf_from(client, "/items/2?tab=details")
         response = client.post(
@@ -243,6 +253,8 @@ def test_setup_login_create_item_and_pwa_routes():
                     "price_avg": "450",
                     "price_max": "700",
                     "actual_price": "425",
+                    "amount": "2",
+                    "reason": "Big enough for dinner with friends",
                 },
             ),
             follow_redirects=False,
@@ -554,13 +566,29 @@ def test_bad_inputs_are_controlled_responses():
         assert response.status_code == 400
         assert "Links must use http or https." in response.text
 
+        for bad_amount in ("nope", "1.5", "0", "-1"):
+            response = client.post(
+                "/items",
+                data=with_csrf(
+                    token,
+                    {"wishlist_id": 1, "title": "Bad amount", "status": "planned", "price_avg": "10", "amount": bad_amount},
+                ),
+                follow_redirects=False,
+            )
+            assert response.status_code == 400
+            assert "Amount must be a whole number of at least 1." in response.text
+            assert f'value="{bad_amount}"' in response.text
+
         response = client.post(
             "/items",
-            data=with_csrf(token, {"wishlist_id": 1, "title": "Good item", "status": "planned", "price_avg": "10"}),
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Good item", "status": "planned", "price_avg": "10", "amount": ""}),
             follow_redirects=False,
         )
         assert response.status_code == 303
         item_id = response.headers["location"].split("/")[-1]
+        response = client.get(f"/items/{item_id}")
+        assert response.status_code == 200
+        assert "Amount</span>" not in response.text
 
         token = csrf_from(client, f"/items/{item_id}?tab=budget")
         response = client.post(

@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models import Item, ItemStatus, RecurrenceCadence, SavingAccount, SavingsRule, User, Wishlist
-from app.services import account_breakdown, item_saved_total, process_due_savings_rules
+from app.services import account_breakdown, item_saved_total, item_target, item_unit_price, process_due_savings_rules
 
 
 def session():
@@ -90,3 +90,21 @@ def test_recurring_savings_mark_item_ready_when_target_reached():
     db.refresh(item)
 
     assert item.status == ItemStatus.ready
+
+
+def test_item_target_multiplies_by_amount_and_defaults_to_one():
+    base_item = Item(title="Lamp", rank=1, price_avg=Decimal("25.00"))
+    assert item_target(base_item) == Decimal("25.00")
+
+    multi_item = Item(title="Chairs", rank=2, amount=4, price_avg=Decimal("25.00"))
+    assert item_unit_price(multi_item) == Decimal("25.00")
+    assert item_target(multi_item) == Decimal("100.00")
+
+    actual_first_item = Item(
+        title="Discount shelves",
+        rank=3,
+        amount=3,
+        price_avg=Decimal("50.00"),
+        actual_price=Decimal("12.00"),
+    )
+    assert item_target(actual_first_item) == Decimal("36.00")

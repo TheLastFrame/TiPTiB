@@ -59,6 +59,7 @@ from app.services import (
     ensure_defaults,
     item_saved_total,
     item_target,
+    item_unit_price,
     money,
     next_rank,
     progress_percent,
@@ -198,6 +199,18 @@ def decimal_required(value: str, field: str = "amount") -> Decimal:
         raise FormError(f"Invalid {field}.") from exc
 
 
+def item_amount_or_default(value: str | None) -> int:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        return 1
+    if not cleaned.isdecimal():
+        raise FormError("Amount must be a whole number of at least 1.")
+    amount = int(cleaned)
+    if amount < 1:
+        raise FormError("Amount must be a whole number of at least 1.")
+    return amount
+
+
 def item_status_or_400(value: str) -> ItemStatus:
     try:
         return ItemStatus(value)
@@ -317,9 +330,11 @@ def sort_price_value(item: Item, sort_by: str) -> Decimal | int | None:
     actual_price: actual -> avg -> min -> max
     """
     if sort_by == "max_price":
-        return item.price_max or item.price_avg or item.actual_price or item.price_min
+        value = item.price_max or item.price_avg or item.actual_price or item.price_min
+        return money(value) * max(1, int(item.amount or 1)) if value is not None else None
     if sort_by == "actual_price":
-        return item.actual_price or item.price_avg or item.price_min or item.price_max
+        value = item.actual_price or item.price_avg or item.price_min or item.price_max
+        return money(value) * max(1, int(item.amount or 1)) if value is not None else None
     return item.rank
 
 
@@ -421,12 +436,14 @@ def item_detail_context(
 ) -> dict[str, object]:
     saved = item_saved_total(db, item.id)
     target = item_target(item)
+    unit_price = item_unit_price(item)
     return common_context(db, user) | {
         "active": "lists",
         "item": item,
         "selected_tab": selected_tab,
         "saved": saved,
         "target": target,
+        "unit_price": unit_price,
         "progress": progress_percent(saved, target),
         "show_back_button": True,
         "error": error,
@@ -770,6 +787,8 @@ def create_item(
     price_avg: Annotated[str, Form()] = "",
     price_max: Annotated[str, Form()] = "",
     actual_price: Annotated[str, Form()] = "",
+    amount: Annotated[str, Form()] = "",
+    reason: Annotated[str, Form()] = "",
     url: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
 ):
@@ -782,6 +801,8 @@ def create_item(
         "price_avg": price_avg,
         "price_max": price_max,
         "actual_price": actual_price,
+        "amount": amount,
+        "reason": reason,
         "url": url,
         "notes": notes,
     }
@@ -795,7 +816,9 @@ def create_item(
             wishlist_id=wishlist.id,
             category_id=category.id if category else None,
             title=required_text(title, "Item title"),
+            reason=reason.strip() or None,
             status=item_status_or_400(status),
+            amount=item_amount_or_default(amount),
             rank=next_rank(db, user.id, wishlist.id),
             price_min=decimal_or_none(price_min),
             price_avg=decimal_or_none(price_avg),
@@ -851,6 +874,8 @@ def update_item(
     price_avg: Annotated[str, Form()] = "",
     price_max: Annotated[str, Form()] = "",
     actual_price: Annotated[str, Form()] = "",
+    amount: Annotated[str, Form()] = "",
+    reason: Annotated[str, Form()] = "",
     url: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
 ):
@@ -865,6 +890,8 @@ def update_item(
         "price_avg": price_avg,
         "price_max": price_max,
         "actual_price": actual_price,
+        "amount": amount,
+        "reason": reason,
         "url": url,
         "notes": notes,
     }
@@ -873,10 +900,12 @@ def update_item(
         if wishlist.archived and wishlist.id != item.wishlist_id:
             raise FormError("Choose an active wishlist.")
         item.title = required_text(title, "Item title")
+        item.reason = reason.strip() or None
         item.wishlist_id = wishlist.id
         category = scoped_category(db, user, category_id)
         item.category_id = category.id if category else None
         item.status = item_status_or_400(status)
+        item.amount = item_amount_or_default(amount)
         item.rank = rank
         item.price_min = decimal_or_none(price_min)
         item.price_avg = decimal_or_none(price_avg)
