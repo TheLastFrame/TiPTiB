@@ -78,6 +78,7 @@ logger = logging.getLogger("tiptib.startup")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 CURRENCY_RE = re.compile(r"^[A-Za-z]{3}$")
+SHARED_URL_RE = re.compile(r"https?://[^\s<>()\"']+", re.IGNORECASE)
 
 
 class FormError(ValueError):
@@ -243,6 +244,54 @@ def external_url_or_none(value: str) -> str | None:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise FormError("Links must use http or https.")
     return url
+
+
+def clean_shared_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    candidate = value.strip().rstrip(".,;:!?)\"]}")
+    parsed = urlparse(candidate)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    return candidate
+
+
+def first_shared_url(*values: str | None) -> str | None:
+    for value in values:
+        url = clean_shared_url(value)
+        if url:
+            return url
+        for match in SHARED_URL_RE.findall(value or ""):
+            url = clean_shared_url(match)
+            if url:
+                return url
+    return None
+
+
+def clean_shared_text(value: str | None) -> str:
+    without_urls = SHARED_URL_RE.sub("", value or "")
+    without_urls = re.sub(r"\s+", " ", without_urls)
+    return without_urls.strip(" \t\r\n-:|")
+
+
+def unsafe_linkish_text(value: str | None) -> bool:
+    parsed = urlparse((value or "").strip())
+    return bool(parsed.scheme and parsed.scheme not in {"http", "https"})
+
+
+def shared_item_values(title: str | None, text: str | None, url: str | None) -> dict[str, str]:
+    shared_url = first_shared_url(url, text, title)
+    shared_title = "" if unsafe_linkish_text(title) else clean_shared_text(title)
+    shared_text = clean_shared_text(text)
+    item_title = (shared_title or shared_text)[:180]
+    values = {}
+    if item_title:
+        values["title"] = item_title
+    if shared_url:
+        values["url"] = shared_url
+    if shared_text and shared_text != item_title:
+        values["notes"] = shared_text
+    return values
 
 
 def color_or_400(value: str) -> str:
@@ -840,9 +889,13 @@ def new_item(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
     wishlist_id: int = 0,
+    title: str = "",
+    text: str = "",
+    url: str = "",
 ):
     ensure_defaults(db, user)
-    return render(request, "item_form.html", item_form_context(db, user, wishlist_id))
+    values = shared_item_values(title, text, url)
+    return render(request, "item_form.html", item_form_context(db, user, wishlist_id, values=values))
 
 
 @app.get("/items/{item_id}", response_class=HTMLResponse)
@@ -1147,4 +1200,13 @@ def manifest() -> dict[str, object]:
         "background_color": "#f3fbf6",
         "theme_color": "#0f766e",
         "icons": [{"src": "/static/icons/icon.svg", "sizes": "any", "type": "image/svg+xml"}],
+        "share_target": {
+            "action": "/items/new",
+            "method": "GET",
+            "params": {
+                "title": "title",
+                "text": "text",
+                "url": "url",
+            },
+        },
     }

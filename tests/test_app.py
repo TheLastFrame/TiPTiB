@@ -1,3 +1,4 @@
+import html
 import os
 import re
 import tempfile
@@ -294,9 +295,53 @@ def test_setup_login_create_item_and_pwa_routes():
         assert "data-back-button" not in response.text
         login(client, password="new-long-password")
 
-        assert client.get("/manifest.webmanifest").json()["short_name"] == "TiPTiB"
+        manifest = client.get("/manifest.webmanifest").json()
+        assert manifest["short_name"] == "TiPTiB"
+        assert manifest["share_target"] == {
+            "action": "/items/new",
+            "method": "GET",
+            "params": {"title": "title", "text": "text", "url": "url"},
+        }
         assert client.get("/static/sw.js").status_code == 200
         assert client.get("/static/app.js").status_code == 200
+
+
+def test_share_target_prefills_new_item_form():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        url = "https://www.amazon.de/dp/B08N5WRWNW?tag=wishlist"
+        response = client.get("/items/new", params={"title": "Echo Dot", "url": url})
+
+        assert response.status_code == 200
+        assert f'name="title" required placeholder="Dining table" value="{html.escape("Echo Dot")}"' in response.text
+        assert f'name="url" type="url" value="{html.escape(url)}"' in response.text
+        assert client.get("/lists/1").text.count("Echo Dot") == 0
+
+
+def test_share_target_prefills_amazon_url_from_text():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        amazon_text = "Check this out https://www.amazon.com/dp/B0TEST1234?ref_=share"
+        response = client.get("/items/new", params={"title": "USB-C Charger", "text": amazon_text})
+
+        assert response.status_code == 200
+        assert 'name="title" required placeholder="Dining table" value="USB-C Charger"' in response.text
+        assert 'name="url" type="url" value="https://www.amazon.com/dp/B0TEST1234?ref_=share"' in response.text
+        assert ">Check this out</textarea>" in response.text
+
+
+def test_share_target_ignores_unsafe_links_and_falls_back_to_text_title():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        response = client.get("/items/new", params={"title": "javascript:alert(1)", "text": "Kitchen shelf"})
+
+        assert response.status_code == 200
+        assert 'name="title" required placeholder="Dining table" value="Kitchen shelf"' in response.text
+        assert 'name="url" type="url" value="javascript:' not in response.text
+        assert 'name="url" type="url" value=""' in response.text
 
 
 def test_users_cannot_see_each_others_items():
