@@ -883,7 +883,8 @@ def list_detail(
     sort_dir: str = "asc",
 ):
     wishlist = scoped_wishlist(db, user, wishlist_id)
-    selected_status = status if status in {item_status.value for item_status in ItemStatus} else ""
+    item_status_values = {item_status.value for item_status in ItemStatus}
+    selected_status = status if status == "all" or status in item_status_values else ""
     selected_category_id = category_id
     if selected_category_id and not db.scalar(
         select(Category.id).where(Category.id == selected_category_id, Category.user_id == user.id)
@@ -896,11 +897,10 @@ def list_detail(
         selected_account_id = 0
     selected_sort_by = sort_by if sort_by in {"rank", "max_price", "actual_price"} else "rank"
     selected_sort_dir = sort_dir if sort_dir in {"asc", "desc"} else "asc"
-    total_active_items = db.scalar(
+    total_items = db.scalar(
         select(func.count(Item.id)).where(
             Item.user_id == user.id,
             Item.wishlist_id == wishlist.id,
-            Item.status.in_(ACTIVE_STATUSES),
         )
     )
     filters_applied = bool(selected_status or selected_category_id or selected_account_id)
@@ -910,7 +910,9 @@ def list_detail(
         .where(Item.user_id == user.id, Item.wishlist_id == wishlist.id)
         .order_by(Item.rank, Item.created_at)
     )
-    if selected_status:
+    if selected_status == "all":
+        pass
+    elif selected_status:
         query = query.where(Item.status == ItemStatus(selected_status))
     else:
         query = query.where(Item.status.in_(ACTIVE_STATUSES))
@@ -957,7 +959,7 @@ def list_detail(
             "selected_sort_dir": selected_sort_dir,
             "next_sort_dir": "desc" if selected_sort_dir == "asc" else "asc",
             "filters_applied": filters_applied,
-            "total_active_items": total_active_items or 0,
+            "total_items": total_items or 0,
             "show_sum": show_sum,
             "filtered_item_count": len(item_cards),
             "filtered_target_total": filtered_target_total,

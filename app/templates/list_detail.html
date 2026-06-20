@@ -39,13 +39,14 @@
     <summary class="filter-summary-toggle">
       <span>Filters & sorting</span>
       {% if filters_applied %}
-        <span class="chip">{{ item_cards|length }}/{{ total_active_items }} shown</span>
+        <span class="chip">{{ item_cards|length }}/{{ total_items }} shown</span>
       {% endif %}
     </summary>
     <form class="filters" method="get" action="/lists/{{ wishlist.id }}">
       <div class="filter-row">
         <select class="input" name="status">
-          <option value="">Active</option>
+          <option value="" {{ "selected" if not selected_status else "" }}>Active</option>
+          <option value="all" {{ "selected" if selected_status == "all" else "" }}>All statuses</option>
           {% for status in item_statuses %}
             <option value="{{ status.value }}" {{ "selected" if selected_status == status.value else "" }}>{{ status.value }}</option>
           {% endfor %}

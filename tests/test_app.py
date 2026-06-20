@@ -195,6 +195,10 @@ def test_setup_login_create_item_and_pwa_routes():
         assert 'data-back-url="/lists"' in response.text
         assert 'href="/items/2"' in response.text
         assert '<details class="filter-drawer">' in response.text
+        assert '<option value="" selected>Active</option>' in response.text
+        assert '<option value="all" >All statuses</option>' in response.text
+        for status in ("idea", "planned", "saving", "ready", "bought", "skipped"):
+            assert f'<option value="{status}"' in response.text
         assert "shown</span>" not in response.text
         assert "data-submit-on-change" in response.text
         assert "onchange=" not in response.text
@@ -276,6 +280,29 @@ def test_setup_login_create_item_and_pwa_routes():
         assert response.status_code == 200
         assert "Dining table" in response.text
         assert 'data-back-button aria-label="Go back"' in response.text
+
+        response = client.get("/lists/1")
+        assert response.status_code == 200
+        assert "Dining table" not in response.text
+        assert "Maybe someday" in response.text
+
+        response = client.get("/lists/1?status=all")
+        assert response.status_code == 200
+        assert "Dining table" in response.text
+        assert "Maybe someday" in response.text
+        assert "5/5 shown" in response.text
+        assert '<option value="all" selected>All statuses</option>' in response.text
+
+        response = client.get("/lists/1?status=bought")
+        assert response.status_code == 200
+        assert "Dining table" in response.text
+        assert "Maybe someday" not in response.text
+        assert "1/5 shown" in response.text
+
+        response = client.get("/lists/1?status=not-a-status")
+        assert response.status_code == 200
+        assert "Dining table" not in response.text
+        assert "Maybe someday" in response.text
 
         token = csrf_from(client, "/settings")
         response = client.post(
