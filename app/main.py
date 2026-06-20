@@ -10,6 +10,8 @@ from typing import Annotated
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from babel.core import Locale, UnknownLocaleError
+from babel.numbers import UnknownCurrencyFormatError, format_currency
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -79,6 +81,20 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 CURRENCY_RE = re.compile(r"^[A-Za-z]{3}$")
 SHARED_URL_RE = re.compile(r"https?://[^\s<>()\"']+", re.IGNORECASE)
+SUPPORTED_LOCALES = (
+    "de_AT",
+    "de_DE",
+    "en_US",
+    "en_CA",
+    "fr_CA",
+    "en_GB",
+    "fr_FR",
+    "it_IT",
+    "es_ES",
+    "nl_NL",
+    "pl_PL",
+    "cs_CZ",
+)
 
 
 class FormError(ValueError):
@@ -182,20 +198,20 @@ def redirect(path: str, status_code: int = 303) -> RedirectResponse:
     return RedirectResponse(path, status_code=status_code)
 
 
-def decimal_or_none(value: str | None) -> Decimal | None:
+def decimal_or_none(value: str | None, user: User | None = None) -> Decimal | None:
     if value in (None, ""):
         return None
     try:
-        return money(value)
+        return money(value, locale=getattr(user, "locale", None), currency=getattr(user, "currency", None))
     except (InvalidOperation, ValueError):
         raise FormError("Invalid money amount.")
 
 
-def decimal_required(value: str, field: str = "amount") -> Decimal:
+def decimal_required(value: str, field: str = "amount", user: User | None = None) -> Decimal:
     if not value.strip():
         raise FormError(f"Invalid {field}.")
     try:
-        return money(value)
+        return money(value, locale=getattr(user, "locale", None), currency=getattr(user, "currency", None))
     except (InvalidOperation, ValueError) as exc:
         raise FormError(f"Invalid {field}.") from exc
 
@@ -305,6 +321,36 @@ def currency_or_400(value: str) -> str:
     if not CURRENCY_RE.fullmatch(cleaned):
         raise FormError("Currency must be a 3-letter code.")
     return cleaned
+
+
+def locale_or_400(value: str) -> str:
+    cleaned = value.strip()
+    if cleaned not in SUPPORTED_LOCALES:
+        raise FormError("Choose a supported locale.")
+    try:
+        Locale.parse(cleaned)
+    except (UnknownLocaleError, ValueError) as exc:
+        raise FormError("Choose a supported locale.") from exc
+    return cleaned
+
+
+def locale_options(currency: str) -> list[dict[str, str]]:
+    options = []
+    for locale_code in SUPPORTED_LOCALES:
+        locale = Locale.parse(locale_code)
+        try:
+            example = format_currency(Decimal("1234.56"), currency, locale=locale_code)
+        except (UnknownCurrencyFormatError, ValueError):
+            example = format_currency(Decimal("1234.56"), settings.default_currency, locale=locale_code)
+        options.append({"value": locale_code, "label": f"{example} - {locale.display_name}"})
+    return options
+
+
+def locale_display_name(value: str) -> str:
+    try:
+        return Locale.parse(value).display_name
+    except (UnknownLocaleError, ValueError):
+        return value
 
 
 def timezone_or_400(value: str) -> str:
@@ -461,7 +507,16 @@ def settings_context(
     errors: dict[str, str] | None = None,
     values: dict[str, dict[str, object]] | None = None,
 ) -> dict[str, object]:
-    return common_context(db, user) | {"active": "settings", "errors": errors or {}, "values": values or {}}
+    selected_currency = values.get("preferences", {}).get("currency", user.currency) if values else user.currency
+    if not isinstance(selected_currency, str) or not CURRENCY_RE.fullmatch(selected_currency.strip()):
+        selected_currency = user.currency
+    return common_context(db, user) | {
+        "active": "settings",
+        "errors": errors or {},
+        "values": values or {},
+        "locale_display_name": locale_display_name(user.locale),
+        "locale_options": locale_options(selected_currency.strip().upper()),
+    }
 
 
 def item_form_context(
@@ -877,10 +932,10 @@ def create_item(
             status=item_status_or_400(status),
             amount=item_amount_or_default(amount),
             rank=next_rank(db, user.id, wishlist.id),
-            price_min=decimal_or_none(price_min),
-            price_avg=decimal_or_none(price_avg),
-            price_max=decimal_or_none(price_max),
-            actual_price=decimal_or_none(actual_price),
+            price_min=decimal_or_none(price_min, user),
+            price_avg=decimal_or_none(price_avg, user),
+            price_max=decimal_or_none(price_max, user),
+            actual_price=decimal_or_none(actual_price, user),
             url=external_url_or_none(url),
             notes=notes.strip() or None,
         )
@@ -968,10 +1023,10 @@ def update_item(
         item.status = item_status_or_400(status)
         item.amount = item_amount_or_default(amount)
         item.rank = rank
-        item.price_min = decimal_or_none(price_min)
-        item.price_avg = decimal_or_none(price_avg)
-        item.price_max = decimal_or_none(price_max)
-        item.actual_price = decimal_or_none(actual_price)
+        item.price_min = decimal_or_none(price_min, user)
+        item.price_avg = decimal_or_none(price_avg, user)
+        item.price_max = decimal_or_none(price_max, user)
+        item.actual_price = decimal_or_none(actual_price, user)
         item.url = external_url_or_none(url)
         item.notes = notes.strip() or None
         commit_or_400(db, "Unable to update item.")
@@ -1034,7 +1089,7 @@ def create_savings_entry(
             db,
             user_id=user.id,
             item=item,
-            amount=decimal_required(amount),
+            amount=decimal_required(amount, user=user),
             account_id=account.id if account else None,
             kind=SavingsEntryKind.manual,
             note=note.strip() or None,
@@ -1063,7 +1118,7 @@ def upsert_recurring_rule(
         account = scoped_account(db, user, account_id)
         run_at = parse_datetime_or_400(next_run_at)
         rule = item.savings_rule or SavingsRule(user_id=user.id, item_id=item.id)
-        rule.amount = decimal_required(amount)
+        rule.amount = decimal_required(amount, user=user)
         rule.cadence = cadence_or_400(cadence)
         rule.account_id = account.id if account else None
         rule.next_run_at = run_at
@@ -1217,16 +1272,23 @@ def update_preferences(
     csrf: Annotated[None, Depends(validate_csrf)],
     currency: Annotated[str, Form()],
     timezone_name: Annotated[str, Form()],
+    locale_name: Annotated[str, Form()] = settings.default_locale,
 ):
     try:
         user.currency = currency_or_400(currency)
+        user.locale = locale_or_400(locale_name)
         user.timezone = timezone_or_400(timezone_name)
         db.commit()
     except FormError as exc:
         return render(
             request,
             "settings.html",
-            settings_context(db, user, {"preferences": str(exc)}, {"preferences": {"currency": currency, "timezone_name": timezone_name}}),
+            settings_context(
+                db,
+                user,
+                {"preferences": str(exc)},
+                {"preferences": {"currency": currency, "locale_name": locale_name, "timezone_name": timezone_name}},
+            ),
             status_code=400,
         )
     return redirect("/settings")

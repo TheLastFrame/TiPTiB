@@ -353,6 +353,69 @@ def test_share_target_ignores_unsafe_links_and_falls_back_to_text_title():
         assert 'name="url" type="url" value=""' in response.text
 
 
+def test_locale_preference_dropdown_and_persistence():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        response = client.get("/settings")
+        assert response.status_code == 200
+        assert '<option value="en_US" >€1,234.56 - English (United States)</option>' in response.text
+        assert '<option value="en_CA" >€1,234.56 - English (Canada)</option>' in response.text
+        assert 'option value="fr_CA"' in response.text
+
+        token = extract_csrf(response.text)
+        response = client.post(
+            "/settings/preferences",
+            data=with_csrf(token, {"currency": "USD", "locale_name": "en_CA", "timezone_name": "UTC"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        response = client.get("/settings")
+        assert "USD · English (Canada) · UTC" in response.text
+        assert '<option value="en_CA" selected>US$1,234.56 - English (Canada)</option>' in response.text
+
+        token = extract_csrf(response.text)
+        response = client.post(
+            "/settings/preferences",
+            data=with_csrf(token, {"currency": "USD", "locale_name": "en_XX", "timezone_name": "UTC"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
+        assert "Choose a supported locale." in response.text
+
+
+def test_money_forms_accept_comma_decimal_and_currency_symbols():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(
+                token,
+                {"wishlist_id": 1, "title": "Locale sofa", "status": "planned", "price_avg": "1 000,10 €"},
+            ),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        item_response = client.get(f"/items/{item_id}")
+        assert item_response.status_code == 200
+        assert "1 000.10 EUR" in item_response.text
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/savings",
+            data=with_csrf(token, {"amount": "100,10 €"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        budget_response = client.get(f"/items/{item_id}?tab=budget")
+        assert "100.10 EUR" in budget_response.text
+
+
 def test_users_cannot_see_each_others_items():
     with TestClient(app) as client:
         setup_admin(client)

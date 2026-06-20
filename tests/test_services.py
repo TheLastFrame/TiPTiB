@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models import Item, ItemStatus, RecurrenceCadence, SavingAccount, SavingsRule, User, Wishlist
-from app.services import account_breakdown, item_saved_total, item_target, item_unit_price, process_due_savings_rules
+from app.services import account_breakdown, item_saved_total, item_target, item_unit_price, money, process_due_savings_rules
 
 
 def session():
@@ -108,3 +108,28 @@ def test_item_target_multiplies_by_amount_and_defaults_to_one():
         actual_price=Decimal("12.00"),
     )
     assert item_target(actual_first_item) == Decimal("36.00")
+
+
+def test_money_accepts_plain_german_and_currency_formats():
+    assert money("100.10", locale="de_AT", currency="EUR") == Decimal("100.10")
+    assert money("100,10", locale="de_AT", currency="EUR") == Decimal("100.10")
+    assert money("100,10 €", locale="de_AT", currency="EUR") == Decimal("100.10")
+    assert money("€ 100,10", locale="de_AT", currency="EUR") == Decimal("100.10")
+    assert money("1 000,10", locale="de_AT", currency="EUR") == Decimal("1000.10")
+    assert money("1.000,10", locale="de_AT", currency="EUR") == Decimal("1000.10")
+
+
+def test_money_accepts_us_and_canadian_formats():
+    assert money("$1,000.10", locale="en_US", currency="USD") == Decimal("1000.10")
+    assert money("CA$1,000.10", locale="en_CA", currency="CAD") == Decimal("1000.10")
+    assert money("1 000,10 $", locale="fr_CA", currency="CAD") == Decimal("1000.10")
+
+
+def test_money_rejects_malformed_text():
+    for value in ("nope", "12,34,56", "1.00.10", "100,100,10 €"):
+        try:
+            money(value, locale="de_AT", currency="EUR")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"{value!r} should not parse as money")

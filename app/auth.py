@@ -50,6 +50,7 @@ def create_user(
         password_hash=hash_password(password),
         display_name=display_name_clean or username_clean,
         currency=get_settings().default_currency,
+        locale=get_settings().default_locale,
         timezone=get_settings().default_timezone,
         is_admin=is_admin,
     )

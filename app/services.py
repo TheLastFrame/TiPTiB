@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import re
+
+from babel.core import UnknownLocaleError
+from babel.numbers import NumberFormatError, get_currency_symbol, parse_decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -24,10 +28,98 @@ PLANNED_TOTAL_STATUSES = (ItemStatus.planned, ItemStatus.saving, ItemStatus.read
 HISTORY_STATUSES = (ItemStatus.bought, ItemStatus.skipped)
 
 
-def money(value: object | None) -> Decimal:
+MONEY_SPACE_RE = re.compile(r"[\s\u00a0\u202f]+")
+
+
+def _currency_tokens(currency: str | None, locale: str | None) -> list[str]:
+    tokens = ["€", "$", "US$", "CA$", "C$", "£"]
+    if currency:
+        tokens.append(currency.upper())
+        try:
+            tokens.append(get_currency_symbol(currency.upper(), locale=locale))
+        except (UnknownLocaleError, ValueError):
+            pass
+    return sorted({token for token in tokens if token}, key=len, reverse=True)
+
+
+def _strip_currency_tokens(value: str, currency: str | None, locale: str | None) -> str:
+    cleaned = value.strip()
+    changed = True
+    while changed:
+        changed = False
+        for token in _currency_tokens(currency, locale):
+            if cleaned.upper().startswith(token.upper()):
+                cleaned = cleaned[len(token) :].strip()
+                changed = True
+            if cleaned.upper().endswith(token.upper()):
+                cleaned = cleaned[: -len(token)].strip()
+                changed = True
+    return cleaned
+
+
+def _normalize_decimal_text(value: str) -> str:
+    cleaned = MONEY_SPACE_RE.sub("", value)
+    if not cleaned:
+        raise ValueError("empty money amount")
+    sign = ""
+    if cleaned[0] in "+-":
+        sign = cleaned[0]
+        cleaned = cleaned[1:]
+    if not cleaned or not re.fullmatch(r"\d[\d.,]*", cleaned):
+        raise ValueError("invalid money amount")
+
+    dot_count = cleaned.count(".")
+    comma_count = cleaned.count(",")
+    if dot_count and comma_count:
+        decimal_sep = "." if cleaned.rfind(".") > cleaned.rfind(",") else ","
+        grouping_sep = "," if decimal_sep == "." else "."
+        integer, fraction = cleaned.rsplit(decimal_sep, 1)
+        if not fraction.isdigit() or len(fraction) > 2:
+            raise ValueError("invalid money amount")
+        groups = integer.split(grouping_sep)
+        if not groups[0].isdigit() or not 1 <= len(groups[0]) <= 3:
+            raise ValueError("invalid money amount")
+        if any(not group.isdigit() or len(group) != 3 for group in groups[1:]):
+            raise ValueError("invalid money amount")
+        return f"{sign}{''.join(groups)}.{fraction}"
+
+    separator = "." if dot_count else "," if comma_count else ""
+    if not separator:
+        return f"{sign}{cleaned}"
+
+    parts = cleaned.split(separator)
+    if any(not part.isdigit() for part in parts):
+        raise ValueError("invalid money amount")
+    if len(parts) == 2 and len(parts[1]) <= 2:
+        return f"{sign}{parts[0]}.{parts[1]}"
+    if len(parts[0]) > 3 or any(len(part) != 3 for part in parts[1:]):
+        raise ValueError("invalid money amount")
+    return f"{sign}{''.join(parts)}"
+
+
+def parse_money(value: object | None, *, locale: str | None = None, currency: str | None = None) -> Decimal:
     if value in (None, ""):
         return Decimal("0.00")
-    return Decimal(str(value)).quantize(Decimal("0.01"))
+    if not isinstance(value, str):
+        return Decimal(str(value)).quantize(Decimal("0.01"))
+
+    cleaned = _strip_currency_tokens(value, currency, locale)
+    try:
+        return Decimal(_normalize_decimal_text(cleaned)).quantize(Decimal("0.01"))
+    except ValueError:
+        if "." in cleaned or "," in cleaned:
+            raise
+        if locale:
+            parsed = parse_decimal(cleaned, locale=locale)
+            return parsed.quantize(Decimal("0.01"))
+        raise
+
+
+def money(value: object | None, *, locale: str | None = None, currency: str | None = None) -> Decimal:
+    try:
+        return parse_money(value, locale=locale, currency=currency)
+    except NumberFormatError as exc:
+        raise ValueError("invalid money amount") from exc
 
 
 def item_saved_total(db: Session, item_id: int) -> Decimal:

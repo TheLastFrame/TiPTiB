@@ -43,6 +43,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     display_name: Mapped[str] = mapped_column(String(120))
     currency: Mapped[str] = mapped_column(String(3), default="EUR")
+    locale: Mapped[str] = mapped_column(String(20), default="de_AT")
     timezone: Mapped[str] = mapped_column(String(80), default="Europe/Vienna")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)

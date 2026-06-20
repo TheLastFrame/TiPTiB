@@ -4,7 +4,7 @@
   <section class="hero">
     <span class="eyebrow">Account settings</span>
     <h1>Settings</h1>
-    <p>{{ user.currency }} · {{ user.timezone }}</p>
+    <p>{{ user.currency }} · {{ locale_display_name }} · {{ user.timezone }}</p>
   </section>
 
   <section class="grid two">
@@ -16,6 +16,15 @@
         <div class="field">
           <label>Currency</label>
           <input class="input" name="currency" value="{{ values.get('preferences', {}).get('currency', user.currency) }}" maxlength="3" required>
+        </div>
+        <div class="field">
+          <label>Locale</label>
+          <select class="input" name="locale_name" required>
+            {% set selected_locale = values.get('preferences', {}).get('locale_name', user.locale) %}
+            {% for option in locale_options %}
+              <option value="{{ option.value }}" {{ "selected" if selected_locale == option.value else "" }}>{{ option.label }}</option>
+            {% endfor %}
+          </select>
         </div>
         <div class="field">
           <label>Timezone</label>

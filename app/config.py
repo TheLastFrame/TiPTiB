@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     default_currency: str = "EUR"
     default_timezone: str = "Europe/Vienna"
+    default_locale: str = "de_AT"
     session_cookie_name: str = "tiptib_session"
     session_cookie_secure: bool | None = None
     session_max_age_seconds: int = 60 * 60 * 24 * 14
