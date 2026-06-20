@@ -66,6 +66,7 @@ from app.services import (
     money,
     next_rank,
     progress_percent,
+    projected_recurring_deposits,
     process_due_savings_rules,
 )
 from app.security import (
@@ -571,12 +572,13 @@ def item_form_context(
     return common_context(db, user) | {"active": "add", "item": None, "wishlist_id": wishlist_id, "error": error, "values": values or {}}
 
 
-def deposit_chart_data(item: Item, user: User, target: Decimal) -> dict[str, object] | None:
+def deposit_chart_data(item: Item, user: User, saved: Decimal, target: Decimal) -> dict[str, object] | None:
     entries = sorted(
         item.savings_entries,
         key=lambda entry: (entry.scheduled_for or entry.created_at, entry.id),
     )
-    if not entries:
+    projected_deposits = projected_recurring_deposits(saved=saved, target=target, rule=item.savings_rule)
+    if not entries and not projected_deposits:
         return None
 
     cumulative = Decimal("0.00")
@@ -602,9 +604,28 @@ def deposit_chart_data(item: Item, user: User, target: Decimal) -> dict[str, obj
             }
         )
 
+    projected_points = []
+    for deposit in projected_deposits:
+        display_at = user_datetime(deposit.scheduled_for, user)
+        label = display_at.strftime("%Y-%m-%d %H:%M") if display_at else ""
+        labels.append(label)
+        projected_points.append(
+            {
+                "label": label,
+                "amount": float(deposit.amount),
+                "amountLabel": money_display(deposit.amount, user),
+                "cumulative": float(deposit.cumulative),
+                "cumulativeLabel": money_display(deposit.cumulative, user),
+                "kind": SavingsEntryKind.recurring.value,
+                "account": item.savings_rule.account.name if item.savings_rule and item.savings_rule.account else "",
+                "note": "Estimated recurring deposit",
+            }
+        )
+
     return {
         "labels": labels,
         "points": points,
+        "projectedPoints": projected_points,
         "target": float(target) if target > 0 else None,
         "targetLabel": money_display(target, user) if target > 0 else "",
         "currency": user.currency or settings.default_currency,
@@ -638,7 +659,7 @@ def item_detail_context(
         "unit_price": unit_price,
         "progress": progress_percent(saved, target),
         "goal_estimate": goal_reach_estimate(saved=saved, target=target, rule=item.savings_rule),
-        "deposit_chart": deposit_chart_data(item, user, target),
+        "deposit_chart": deposit_chart_data(item, user, saved, target),
         "show_back_button": True,
         "back_url": f"/lists/{item.wishlist_id}",
         "error": error,

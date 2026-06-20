@@ -39,6 +39,13 @@ class GoalReachEstimate:
     remaining: Decimal
 
 
+@dataclass(frozen=True)
+class ProjectedDeposit:
+    scheduled_for: datetime
+    amount: Decimal
+    cumulative: Decimal
+
+
 def _currency_tokens(currency: str | None, locale: str | None) -> list[str]:
     tokens = ["€", "$", "US$", "CA$", "C$", "£"]
     if currency:
@@ -268,6 +275,34 @@ def goal_reach_estimate(
         run_at = advance_run_at(run_at, rule.cadence)
 
     return GoalReachEstimate(reached_at=reached_at, deposit_count=deposit_count, remaining=remaining)
+
+
+def projected_recurring_deposits(
+    *,
+    saved: Decimal,
+    target: Decimal,
+    rule: SavingsRule | None,
+    now: datetime | None = None,
+) -> list[ProjectedDeposit]:
+    if target <= 0 or saved >= target or rule is None or not rule.active:
+        return []
+
+    deposit_amount = money(rule.amount)
+    if deposit_amount <= 0:
+        return []
+
+    run_at = as_utc(rule.next_run_at)
+    now = as_utc(now or datetime.now(timezone.utc))
+    while run_at <= now:
+        run_at = advance_run_at(run_at, rule.cadence)
+
+    cumulative = money(saved)
+    deposits = []
+    while cumulative < target:
+        cumulative = money(cumulative + deposit_amount)
+        deposits.append(ProjectedDeposit(scheduled_for=run_at, amount=deposit_amount, cumulative=cumulative))
+        run_at = advance_run_at(run_at, rule.cadence)
+    return deposits
 
 
 def process_due_savings_rules(db: Session, now: datetime | None = None) -> int:

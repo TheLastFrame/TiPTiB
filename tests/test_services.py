@@ -13,6 +13,7 @@ from app.services import (
     item_target,
     item_unit_price,
     money,
+    projected_recurring_deposits,
     process_due_savings_rules,
 )
 
@@ -191,6 +192,57 @@ def test_goal_reach_estimate_returns_none_without_projectable_rate():
     assert goal_reach_estimate(saved=Decimal("0.00"), target=Decimal("0.00"), rule=active_rule, now=now) is None
     assert goal_reach_estimate(saved=Decimal("0.00"), target=Decimal("100.00"), rule=inactive_rule, now=now) is None
     assert goal_reach_estimate(saved=Decimal("0.00"), target=Decimal("100.00"), rule=zero_rule, now=now) is None
+
+
+def test_projected_recurring_deposits_match_goal_reach_schedule_and_skip_overdue_runs():
+    now = datetime(2026, 1, 15, tzinfo=timezone.utc)
+    projections = projected_recurring_deposits(
+        saved=Decimal("10.00"),
+        target=Decimal("70.00"),
+        rule=SavingsRule(
+            amount=Decimal("20.00"),
+            cadence=RecurrenceCadence.weekly,
+            next_run_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            active=True,
+        ),
+        now=now,
+    )
+
+    assert [deposit.scheduled_for for deposit in projections] == [
+        datetime(2026, 1, 22, tzinfo=timezone.utc),
+        datetime(2026, 1, 29, tzinfo=timezone.utc),
+        datetime(2026, 2, 5, tzinfo=timezone.utc),
+    ]
+    assert [deposit.amount for deposit in projections] == [Decimal("20.00"), Decimal("20.00"), Decimal("20.00")]
+    assert [deposit.cumulative for deposit in projections] == [Decimal("30.00"), Decimal("50.00"), Decimal("70.00")]
+
+
+def test_projected_recurring_deposits_return_empty_without_projectable_rule():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    active_rule = SavingsRule(
+        amount=Decimal("10.00"),
+        cadence=RecurrenceCadence.weekly,
+        next_run_at=datetime(2026, 1, 8, tzinfo=timezone.utc),
+        active=True,
+    )
+    inactive_rule = SavingsRule(
+        amount=Decimal("10.00"),
+        cadence=RecurrenceCadence.weekly,
+        next_run_at=datetime(2026, 1, 8, tzinfo=timezone.utc),
+        active=False,
+    )
+    zero_rule = SavingsRule(
+        amount=Decimal("0.00"),
+        cadence=RecurrenceCadence.weekly,
+        next_run_at=datetime(2026, 1, 8, tzinfo=timezone.utc),
+        active=True,
+    )
+
+    assert projected_recurring_deposits(saved=Decimal("0.00"), target=Decimal("100.00"), rule=None, now=now) == []
+    assert projected_recurring_deposits(saved=Decimal("100.00"), target=Decimal("100.00"), rule=active_rule, now=now) == []
+    assert projected_recurring_deposits(saved=Decimal("0.00"), target=Decimal("0.00"), rule=active_rule, now=now) == []
+    assert projected_recurring_deposits(saved=Decimal("0.00"), target=Decimal("100.00"), rule=inactive_rule, now=now) == []
+    assert projected_recurring_deposits(saved=Decimal("0.00"), target=Decimal("100.00"), rule=zero_rule, now=now) == []
 
 
 def test_money_accepts_plain_german_and_currency_formats():

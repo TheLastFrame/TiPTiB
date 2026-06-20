@@ -127,6 +127,14 @@ p { color: var(--muted); margin: 0; line-height: 1.5; }
   width: 100% !important;
   height: 100% !important;
 }
+.chart-actions {
+  justify-content: flex-end;
+}
+.chart-toggle {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: .82rem;
+}
 .tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

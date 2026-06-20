@@ -120,7 +120,15 @@
           <article class="panel stack">
             <div class="row wrap">
               <h2>Deposit history</h2>
-              {% if deposit_chart.target %}<span class="pill">Target {{ deposit_chart.targetLabel }}</span>{% endif %}
+              <div class="row wrap chart-actions">
+                {% if deposit_chart.projectedPoints %}
+                  <label class="toggle-card chart-toggle">
+                    <input type="checkbox" data-deposit-estimate-toggle>
+                    Estimate
+                  </label>
+                {% endif %}
+                {% if deposit_chart.target %}<span class="pill">Target {{ deposit_chart.targetLabel }}</span>{% endif %}
+              </div>
             </div>
             <div class="chart-frame">
               <canvas

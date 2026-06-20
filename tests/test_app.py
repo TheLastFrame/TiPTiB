@@ -48,6 +48,12 @@ def with_csrf(token: str, data: dict[str, object] | None = None) -> dict[str, ob
     return {"csrf_token": token} | dict(data or {})
 
 
+def chart_payload(response_text: str) -> dict[str, object]:
+    match = re.search(r"data-chart='([^']+)'", response_text)
+    assert match, response_text
+    return json.loads(html.unescape(match.group(1)))
+
+
 def setup_admin(client: TestClient) -> None:
     token = csrf_from(client, "/setup")
     response = client.post(
@@ -606,17 +612,189 @@ def test_budget_deposit_history_chart_uses_cumulative_deposits():
         assert "First push" in budget_response.text
         assert "Second push" in budget_response.text
 
-        match = re.search(r"data-chart='([^']+)'", budget_response.text)
-        assert match, budget_response.text
-        chart = json.loads(html.unescape(match.group(1)))
+        chart = chart_payload(budget_response.text)
         assert chart["target"] == 100.0
         assert chart["targetLabel"] == "100.00 EUR"
+        assert chart["projectedPoints"] == []
         assert [point["amount"] for point in chart["points"]] == [25.0, 10.5]
         assert [point["cumulative"] for point in chart["points"]] == [25.0, 35.5]
         assert [point["amountLabel"] for point in chart["points"]] == ["25.00 EUR", "10.50 EUR"]
         assert [point["cumulativeLabel"] for point in chart["points"]] == ["25.00 EUR", "35.50 EUR"]
         assert all(point["kind"] == "manual" for point in chart["points"])
         assert all(point["account"] == "Cash" for point in chart["points"])
+
+
+def test_budget_deposit_history_chart_includes_recurring_estimate_overlay():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/preferences",
+            data=with_csrf(token, {"currency": "EUR", "timezone_name": "UTC"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Forecast camera", "status": "planned", "price_avg": "100"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/savings",
+            data=with_csrf(token, {"amount": "40", "account_id": 1, "note": "Saved already"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/recurring-rule",
+            data=with_csrf(
+                token,
+                {"amount": "25", "cadence": "weekly", "account_id": 1, "next_run_at": "2099-01-01T00:00", "active": "on"},
+            ),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        budget_response = client.get(f"/items/{item_id}?tab=budget")
+        assert budget_response.status_code == 200
+        assert "data-deposit-estimate-toggle" in budget_response.text
+        chart = chart_payload(budget_response.text)
+        assert [point["cumulative"] for point in chart["points"]] == [40.0]
+        assert [point["amount"] for point in chart["projectedPoints"]] == [25.0, 25.0, 25.0]
+        assert [point["cumulative"] for point in chart["projectedPoints"]] == [65.0, 90.0, 115.0]
+        assert all(point["kind"] == "recurring" for point in chart["projectedPoints"])
+        assert all(point["account"] == "Cash" for point in chart["projectedPoints"])
+        assert chart["labels"][-3:] == [point["label"] for point in chart["projectedPoints"]]
+
+
+def test_budget_deposit_history_chart_renders_with_estimate_only():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Future sofa", "status": "planned", "price_avg": "60"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/recurring-rule",
+            data=with_csrf(
+                token,
+                {"amount": "20", "cadence": "monthly", "account_id": 0, "next_run_at": "2099-01-01T00:00", "active": "on"},
+            ),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        budget_response = client.get(f"/items/{item_id}?tab=budget")
+        assert budget_response.status_code == 200
+        assert '<script src="/static/vendor/chart.umd.min.js" defer></script>' in budget_response.text
+        assert "data-deposit-chart" in budget_response.text
+        assert "data-deposit-estimate-toggle" in budget_response.text
+        assert "No deposits yet." in budget_response.text
+        chart = chart_payload(budget_response.text)
+        assert chart["points"] == []
+        assert [point["cumulative"] for point in chart["projectedPoints"]] == [20.0, 40.0, 60.0]
+
+
+def test_budget_deposit_history_chart_omits_estimate_without_projectable_rule():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Inactive forecast", "status": "planned", "price_avg": "100"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/recurring-rule",
+            data=with_csrf(token, {"amount": "25", "cadence": "weekly", "account_id": 0, "next_run_at": "2099-01-01T00:00"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        budget_response = client.get(f"/items/{item_id}?tab=budget")
+        assert budget_response.status_code == 200
+        assert "data-deposit-chart" not in budget_response.text
+        assert "data-deposit-estimate-toggle" not in budget_response.text
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Targetless forecast", "status": "planned"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/recurring-rule",
+            data=with_csrf(
+                token,
+                {"amount": "25", "cadence": "weekly", "account_id": 0, "next_run_at": "2099-01-01T00:00", "active": "on"},
+            ),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        budget_response = client.get(f"/items/{item_id}?tab=budget")
+        assert budget_response.status_code == 200
+        assert "data-deposit-chart" not in budget_response.text
+        assert "data-deposit-estimate-toggle" not in budget_response.text
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Funded forecast", "status": "planned", "price_avg": "50"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/savings",
+            data=with_csrf(token, {"amount": "50", "account_id": 1}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/recurring-rule",
+            data=with_csrf(
+                token,
+                {"amount": "25", "cadence": "weekly", "account_id": 0, "next_run_at": "2099-01-01T00:00", "active": "on"},
+            ),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        budget_response = client.get(f"/items/{item_id}?tab=budget")
+        assert budget_response.status_code == 200
+        assert "data-deposit-chart" in budget_response.text
+        assert "data-deposit-estimate-toggle" not in budget_response.text
+        assert chart_payload(budget_response.text)["projectedPoints"] == []
 
 
 def test_savings_entry_can_be_deleted_from_budget_history():

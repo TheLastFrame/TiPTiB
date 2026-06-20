@@ -208,44 +208,103 @@ function initDepositCharts() {
     }
 
     const points = Array.isArray(chartData.points) ? chartData.points : [];
-    const labels = Array.isArray(chartData.labels) ? chartData.labels : [];
-    if (!points.length || !labels.length) {
+    const projectedPoints = Array.isArray(chartData.projectedPoints) ? chartData.projectedPoints : [];
+    const actualLabels = points.map((point) => point.label);
+    const projectedLabels = projectedPoints.map((point) => point.label);
+    const initialLabels = actualLabels.length ? actualLabels : projectedLabels;
+    if (!initialLabels.length) {
       return;
     }
 
-    const datasets = [
-      {
-        label: "Saved",
-        data: points.map((point) => point.cumulative),
-        borderColor: "#0f766e",
-        backgroundColor: "rgba(15, 118, 110, 0.14)",
-        pointBackgroundColor: "#ff6b4a",
-        pointBorderColor: "#fffaf0",
-        pointBorderWidth: 2,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        fill: true,
-        tension: 0.28,
-      },
-    ];
-
-    if (typeof chartData.target === "number" && chartData.target > 0) {
-      datasets.push({
-        label: "Target",
-        data: labels.map(() => chartData.target),
-        borderColor: "#ff6b4a",
-        borderDash: [6, 5],
-        borderWidth: 2,
-        pointRadius: 0,
-        pointHoverRadius: 0,
-        fill: false,
-        tension: 0,
-      });
+    function dateFromLabel(label) {
+      const match = String(label || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!match) {
+        return null;
+      }
+      return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
     }
 
-    new Chart(canvas, {
+    function compactDateLabel(label, allLabels) {
+      const date = dateFromLabel(label);
+      if (!date) {
+        return label;
+      }
+      const dates = allLabels.map(dateFromLabel).filter(Boolean);
+      const first = dates[0];
+      const last = dates[dates.length - 1];
+      const dayMonth = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" }).format(date);
+      if (!first || !last) {
+        return dayMonth;
+      }
+      const spanDays = Math.abs(last - first) / 86400000;
+      if (spanDays > 180) {
+        return new Intl.DateTimeFormat(undefined, { month: "short", year: "numeric" }).format(date);
+      }
+      if (first.getFullYear() !== last.getFullYear()) {
+        return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "2-digit" }).format(date);
+      }
+      return dayMonth;
+    }
+
+    function buildChartState(showEstimate) {
+      const labels = showEstimate ? actualLabels.concat(projectedLabels) : initialLabels;
+      const projectedStartIndex = showEstimate ? actualLabels.length : actualLabels.length ? labels.length : 0;
+      const datasets = [];
+
+      if (points.length) {
+        datasets.push({
+          label: "Saved",
+          data: labels.map((_, index) => points[index]?.cumulative ?? null),
+          borderColor: "#0f766e",
+          backgroundColor: "rgba(15, 118, 110, 0.14)",
+          pointBackgroundColor: "#ff6b4a",
+          pointBorderColor: "#fffaf0",
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          fill: true,
+          tension: 0.28,
+        });
+      }
+
+      if (projectedPoints.length && showEstimate) {
+        datasets.push({
+          label: "Estimate",
+          data: labels.map((_, index) => projectedPoints[index - projectedStartIndex]?.cumulative ?? null),
+          borderColor: "#4f46e5",
+          backgroundColor: "rgba(79, 70, 229, 0.08)",
+          borderDash: [4, 4],
+          pointBackgroundColor: "#4f46e5",
+          pointBorderColor: "#fffaf0",
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          fill: false,
+          tension: 0.18,
+        });
+      }
+
+      if (typeof chartData.target === "number" && chartData.target > 0) {
+        datasets.push({
+          label: "Target",
+          data: labels.map(() => chartData.target),
+          borderColor: "#ff6b4a",
+          borderDash: [6, 5],
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          fill: false,
+          tension: 0,
+        });
+      }
+
+      return { labels, datasets, projectedStartIndex };
+    }
+
+    let chartState = buildChartState(false);
+    const chart = new Chart(canvas, {
       type: "line",
-      data: { labels, datasets },
+      data: { labels: chartState.labels, datasets: chartState.datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -256,24 +315,33 @@ function initDepositCharts() {
           },
           tooltip: {
             filter(context) {
-              return context.dataset.label !== "Target";
+              return context.dataset.label !== "Target" && context.parsed.y !== null;
             },
             callbacks: {
               label(context) {
+                if (context.dataset.label === "Estimate") {
+                  const point = projectedPoints[context.dataIndex - chartState.projectedStartIndex];
+                  return `Estimated: ${point?.cumulativeLabel || context.formattedValue}`;
+                }
                 const point = points[context.dataIndex];
                 return `Saved: ${point?.cumulativeLabel || context.formattedValue}`;
               },
               afterBody(items) {
-                const item = items.find((entry) => entry.dataset.label === "Saved");
+                const item = items.find((entry) => entry.dataset.label === "Saved" || entry.dataset.label === "Estimate");
                 if (!item) {
                   return [];
                 }
-                const point = points[item.dataIndex];
+                const point =
+                  item.dataset.label === "Estimate"
+                    ? projectedPoints[item.dataIndex - chartState.projectedStartIndex]
+                    : points[item.dataIndex];
                 if (!point) {
                   return [];
                 }
                 return [
-                  `Deposit: ${point.amountLabel}`,
+                  item.dataset.label === "Estimate"
+                    ? `Estimated deposit: ${point.amountLabel}`
+                    : `Deposit: ${point.amountLabel}`,
                   `Kind: ${point.kind}`,
                   point.account ? `Account: ${point.account}` : "",
                   point.note ? `Note: ${point.note}` : "",
@@ -284,7 +352,16 @@ function initDepositCharts() {
         },
         scales: {
           x: {
-            ticks: { color: "#65756f", maxRotation: 0, autoSkip: true, maxTicksLimit: 4 },
+            ticks: {
+              color: "#65756f",
+              maxRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 4,
+              callback(value) {
+                const label = this.getLabelForValue(value);
+                return compactDateLabel(label, this.chart.data.labels);
+              },
+            },
             grid: { display: false },
           },
           y: {
@@ -300,5 +377,15 @@ function initDepositCharts() {
         },
       },
     });
+
+    const estimateToggle = canvas.closest("article")?.querySelector("[data-deposit-estimate-toggle]");
+    if (estimateToggle instanceof HTMLInputElement) {
+      estimateToggle.addEventListener("change", () => {
+        chartState = buildChartState(estimateToggle.checked);
+        chart.data.labels = chartState.labels;
+        chart.data.datasets = chartState.datasets;
+        chart.update();
+      });
+    }
   });
 }
