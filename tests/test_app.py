@@ -538,6 +538,21 @@ def test_category_update_validation_and_ownership():
         logout(client)
         login(client, username="ada", password="long-ada-password")
 
+        response = client.get("/settings")
+        assert response.status_code == 200
+        assert "<h2>Add user</h2>" not in response.text
+        assert "Create private user" not in response.text
+        assert 'action="/settings/users"' not in response.text
+        assert "Only admins can add users." not in response.text
+
+        token = extract_csrf(response.text)
+        response = client.post(
+            "/settings/users",
+            data=with_csrf(token, {"display_name": "Grace", "username": "grace", "password": "long-grace-password"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 403
+
         token = csrf_from(client, "/settings")
         response = client.post("/categories/1", data=with_csrf(token, {"name": "Nope", "color": "#8b8f78"}), follow_redirects=False)
         assert response.status_code == 404

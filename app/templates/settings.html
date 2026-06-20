@@ -111,18 +111,19 @@
       </form>
     </article>
 
-    <article class="panel">
-      <form class="form" method="post" action="/settings/users">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <h2>Add user</h2>
-        {% if errors.get("users") %}<p class="error">{{ errors.get("users") }}</p>{% endif %}
-        {% if not user.is_admin %}<p>Only admins can add users.</p>{% endif %}
-        <input class="input" name="display_name" placeholder="Display name" value="{{ values.get('users', {}).get('display_name', '') }}" {{ "disabled" if not user.is_admin else "" }}>
-        <input class="input" name="username" placeholder="Username" value="{{ values.get('users', {}).get('username', '') }}" required {{ "disabled" if not user.is_admin else "" }}>
-        <input class="input" name="password" type="password" placeholder="Password" required {{ "disabled" if not user.is_admin else "" }}>
-        <button class="button secondary" type="submit" {{ "disabled" if not user.is_admin else "" }}>Create private user</button>
-      </form>
-    </article>
+    {% if user.is_admin %}
+      <article class="panel">
+        <form class="form" method="post" action="/settings/users">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <h2>Add user</h2>
+          {% if errors.get("users") %}<p class="error">{{ errors.get("users") }}</p>{% endif %}
+          <input class="input" name="display_name" placeholder="Display name" value="{{ values.get('users', {}).get('display_name', '') }}">
+          <input class="input" name="username" placeholder="Username" value="{{ values.get('users', {}).get('username', '') }}" required>
+          <input class="input" name="password" type="password" placeholder="Password" required>
+          <button class="button secondary" type="submit">Create private user</button>
+        </form>
+      </article>
+    {% endif %}
 
     <article class="panel">
       <form class="form" method="post" action="/logout">
