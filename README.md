@@ -38,12 +38,25 @@ Open `http://127.0.0.1:8000` and create the first admin user.
 
 ## Docker
 
+Docker Compose stores the SQLite database in a named volume mounted at `/app/data`:
+
 ```powershell
 $env:TIPTIB_SECRET_KEY = $(python -c "import secrets; print(secrets.token_urlsafe(48))")
 docker compose up --build
 ```
 
 The app will be available at `http://127.0.0.1:8000`.
+
+For a plain Docker run, mount `/app/data` yourself so the database survives container replacement:
+
+```powershell
+docker build -t tiptib .
+docker volume create tiptib-data
+docker run --rm -p 8000:8000 `
+  -e TIPTIB_SECRET_KEY="<unique random value, 32+ chars>" `
+  -v tiptib-data:/app/data `
+  tiptib
+```
 
 ## Configuration
 
