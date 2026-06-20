@@ -11,13 +11,14 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -76,6 +77,10 @@ logger = logging.getLogger("tiptib.startup")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 CURRENCY_RE = re.compile(r"^[A-Za-z]{3}$")
+
+
+class FormError(ValueError):
+    pass
 
 
 @pass_context
@@ -161,6 +166,16 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if 300 <= exc.status_code < 400 and exc.headers and exc.headers.get("Location"):
+        return RedirectResponse(exc.headers["Location"], status_code=exc.status_code)
+    if request.url.path in {"/health", "/manifest.webmanifest"}:
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
+    detail = exc.detail if isinstance(exc.detail, str) else "Something went wrong."
+    return render(request, "error.html", {"status_code": exc.status_code, "detail": detail}, status_code=exc.status_code)
+
+
 def redirect(path: str, status_code: int = 303) -> RedirectResponse:
     return RedirectResponse(path, status_code=status_code)
 
@@ -171,37 +186,37 @@ def decimal_or_none(value: str | None) -> Decimal | None:
     try:
         return money(value)
     except (InvalidOperation, ValueError):
-        raise HTTPException(status_code=400, detail="Invalid money amount.")
+        raise FormError("Invalid money amount.")
 
 
 def decimal_required(value: str, field: str = "amount") -> Decimal:
     if not value.strip():
-        raise HTTPException(status_code=400, detail=f"Invalid {field}.")
+        raise FormError(f"Invalid {field}.")
     try:
         return money(value)
     except (InvalidOperation, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid {field}.") from exc
+        raise FormError(f"Invalid {field}.") from exc
 
 
 def item_status_or_400(value: str) -> ItemStatus:
     try:
         return ItemStatus(value)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid item status.") from exc
+        raise FormError("Invalid item status.") from exc
 
 
 def cadence_or_400(value: str) -> RecurrenceCadence:
     try:
         return RecurrenceCadence(value)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid recurrence cadence.") from exc
+        raise FormError("Invalid recurrence cadence.") from exc
 
 
 def parse_datetime_or_400(value: str) -> datetime:
     try:
         run_at = datetime.fromisoformat(value) if value else datetime.now(timezone.utc)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid next run date.") from exc
+        raise FormError("Invalid next run date.") from exc
     if run_at.tzinfo is None:
         return run_at.replace(tzinfo=timezone.utc)
     return run_at
@@ -213,20 +228,20 @@ def external_url_or_none(value: str) -> str | None:
         return None
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise HTTPException(status_code=400, detail="Links must use http or https.")
+        raise FormError("Links must use http or https.")
     return url
 
 
 def color_or_400(value: str) -> str:
     if not COLOR_RE.fullmatch(value.strip()):
-        raise HTTPException(status_code=400, detail="Invalid color.")
+        raise FormError("Invalid color.")
     return value.strip()
 
 
 def currency_or_400(value: str) -> str:
     cleaned = value.strip().upper()
     if not CURRENCY_RE.fullmatch(cleaned):
-        raise HTTPException(status_code=400, detail="Currency must be a 3-letter code.")
+        raise FormError("Currency must be a 3-letter code.")
     return cleaned
 
 
@@ -235,14 +250,14 @@ def timezone_or_400(value: str) -> str:
     try:
         ZoneInfo(cleaned)
     except ZoneInfoNotFoundError as exc:
-        raise HTTPException(status_code=400, detail="Unknown timezone.") from exc
+        raise FormError("Unknown timezone.") from exc
     return cleaned
 
 
 def required_text(value: str, field: str) -> str:
     cleaned = value.strip()
     if not cleaned:
-        raise HTTPException(status_code=400, detail=f"{field} is required.")
+        raise FormError(f"{field} is required.")
     return cleaned
 
 
@@ -251,7 +266,7 @@ def commit_or_400(db: Session, detail: str) -> None:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=400, detail=detail) from exc
+        raise FormError(detail) from exc
 
 
 def scoped_category(db: Session, user: User, category_id: int | None) -> Category | None:
@@ -320,6 +335,82 @@ def common_context(db: Session, user: User) -> dict[str, object]:
             .where(SavingAccount.user_id == user.id, SavingAccount.archived.is_(False))
             .order_by(SavingAccount.is_default.desc(), SavingAccount.name)
         ).all(),
+    }
+
+
+def lists_context(db: Session, user: User, error: str | None = None, values: dict[str, object] | None = None) -> dict[str, object]:
+    rows = []
+    for wishlist in db.scalars(select(Wishlist).where(Wishlist.user_id == user.id).order_by(Wishlist.name)).all():
+        items = db.scalars(select(Item).where(Item.user_id == user.id, Item.wishlist_id == wishlist.id, Item.status.in_(ACTIVE_STATUSES))).all()
+        total = sum((item_target(item) for item in items if item.status in PLANNED_TOTAL_STATUSES), Decimal("0.00"))
+        saved = money(
+            db.scalar(
+                select(func.coalesce(func.sum(SavingsEntry.amount), 0))
+                .join(Item, Item.id == SavingsEntry.item_id)
+                .where(Item.user_id == user.id, Item.wishlist_id == wishlist.id)
+            )
+        )
+        rows.append(
+            {
+                "wishlist": wishlist,
+                "item_count": len(items),
+                "total": total,
+                "saved": saved,
+                "progress": progress_percent(saved, total),
+            }
+        )
+    return common_context(db, user) | {"active": "lists", "rows": rows, "error": error, "values": values or {}}
+
+
+def accounts_context(db: Session, user: User, error: str | None = None, values: dict[str, object] | None = None) -> dict[str, object]:
+    rows = []
+    for account in db.scalars(select(SavingAccount).where(SavingAccount.user_id == user.id).order_by(SavingAccount.archived, SavingAccount.name)).all():
+        total = money(db.scalar(select(func.coalesce(func.sum(SavingsEntry.amount), 0)).where(SavingsEntry.account_id == account.id)))
+        rows.append({"account": account, "total": total})
+    return common_context(db, user) | {"active": "accounts", "rows": rows, "error": error, "values": values or {}}
+
+
+def settings_context(
+    db: Session,
+    user: User,
+    errors: dict[str, str] | None = None,
+    values: dict[str, dict[str, object]] | None = None,
+) -> dict[str, object]:
+    return common_context(db, user) | {"active": "settings", "errors": errors or {}, "values": values or {}}
+
+
+def item_form_context(
+    db: Session,
+    user: User,
+    wishlist_id: int = 0,
+    error: str | None = None,
+    values: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return common_context(db, user) | {"active": "add", "item": None, "wishlist_id": wishlist_id, "error": error, "values": values or {}}
+
+
+def item_detail_context(
+    db: Session,
+    user: User,
+    item: Item,
+    selected_tab: str,
+    error: str | None = None,
+    error_form: str | None = None,
+    values: dict[str, object] | None = None,
+) -> dict[str, object]:
+    saved = item_saved_total(db, item.id)
+    target = item_target(item)
+    return common_context(db, user) | {
+        "active": "lists",
+        "item": item,
+        "selected_tab": selected_tab,
+        "saved": saved,
+        "target": target,
+        "progress": progress_percent(saved, target),
+        "show_back_button": True,
+        "error": error,
+        "error_form": error_form,
+        "values": values or {},
     }
 
 
@@ -454,27 +545,7 @@ def lists(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
 ):
-    rows = []
-    for wishlist in db.scalars(select(Wishlist).where(Wishlist.user_id == user.id).order_by(Wishlist.name)).all():
-        items = db.scalars(select(Item).where(Item.user_id == user.id, Item.wishlist_id == wishlist.id, Item.status.in_(ACTIVE_STATUSES))).all()
-        total = sum((item_target(item) for item in items if item.status in PLANNED_TOTAL_STATUSES), Decimal("0.00"))
-        saved = money(
-            db.scalar(
-                select(func.coalesce(func.sum(SavingsEntry.amount), 0))
-                .join(Item, Item.id == SavingsEntry.item_id)
-                .where(Item.user_id == user.id, Item.wishlist_id == wishlist.id)
-            )
-        )
-        rows.append(
-            {
-                "wishlist": wishlist,
-                "item_count": len(items),
-                "total": total,
-                "saved": saved,
-                "progress": progress_percent(saved, total),
-            }
-        )
-    return render(request, "lists.html", common_context(db, user) | {"active": "lists", "rows": rows})
+    return render(request, "lists.html", lists_context(db, user))
 
 
 @app.get("/history", response_class=HTMLResponse)
@@ -489,19 +560,27 @@ def history(
         .where(Item.user_id == user.id, Item.status.in_(HISTORY_STATUSES))
         .order_by(Item.updated_at.desc())
     ).all()
-    return render(request, "history.html", common_context(db, user) | {"active": "history", "history_items": items})
+    return render(
+        request,
+        "history.html",
+        common_context(db, user) | {"active": "history", "history_items": items, "show_back_button": True},
+    )
 
 
 @app.post("/lists")
 def create_list(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
     csrf: Annotated[None, Depends(validate_csrf)],
     name: Annotated[str, Form()],
     description: Annotated[str, Form()] = "",
 ):
-    db.add(Wishlist(user_id=user.id, name=required_text(name, "Wishlist name"), description=description.strip() or None))
-    commit_or_400(db, "A wishlist with that name already exists.")
+    try:
+        db.add(Wishlist(user_id=user.id, name=required_text(name, "Wishlist name"), description=description.strip() or None))
+        commit_or_400(db, "A wishlist with that name already exists.")
+    except FormError as exc:
+        return render(request, "lists.html", lists_context(db, user, str(exc), {"name": name, "description": description}), status_code=400)
     return redirect("/lists")
 
 
@@ -599,12 +678,14 @@ def list_detail(
             "filtered_target_total": filtered_target_total,
             "filtered_saved_total": filtered_saved_total,
             "filtered_progress": progress_percent(filtered_saved_total, filtered_target_total),
+            "show_back_button": True,
         },
     )
 
 
 @app.post("/items")
 def create_item(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
     csrf: Annotated[None, Depends(validate_csrf)],
@@ -619,24 +700,39 @@ def create_item(
     url: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
 ):
-    wishlist = scoped_wishlist(db, user, wishlist_id)
-    category = scoped_category(db, user, category_id)
-    item = Item(
-        user_id=user.id,
-        wishlist_id=wishlist.id,
-        category_id=category.id if category else None,
-        title=required_text(title, "Item title"),
-        status=item_status_or_400(status),
-        rank=next_rank(db, user.id, wishlist.id),
-        price_min=decimal_or_none(price_min),
-        price_avg=decimal_or_none(price_avg),
-        price_max=decimal_or_none(price_max),
-        actual_price=decimal_or_none(actual_price),
-        url=external_url_or_none(url),
-        notes=notes.strip() or None,
-    )
-    db.add(item)
-    commit_or_400(db, "Unable to create item.")
+    values = {
+        "wishlist_id": wishlist_id,
+        "title": title,
+        "category_id": category_id,
+        "status": status,
+        "price_min": price_min,
+        "price_avg": price_avg,
+        "price_max": price_max,
+        "actual_price": actual_price,
+        "url": url,
+        "notes": notes,
+    }
+    try:
+        wishlist = scoped_wishlist(db, user, wishlist_id)
+        category = scoped_category(db, user, category_id)
+        item = Item(
+            user_id=user.id,
+            wishlist_id=wishlist.id,
+            category_id=category.id if category else None,
+            title=required_text(title, "Item title"),
+            status=item_status_or_400(status),
+            rank=next_rank(db, user.id, wishlist.id),
+            price_min=decimal_or_none(price_min),
+            price_avg=decimal_or_none(price_avg),
+            price_max=decimal_or_none(price_max),
+            actual_price=decimal_or_none(actual_price),
+            url=external_url_or_none(url),
+            notes=notes.strip() or None,
+        )
+        db.add(item)
+        commit_or_400(db, "Unable to create item.")
+    except FormError as exc:
+        return render(request, "item_form.html", item_form_context(db, user, wishlist_id, str(exc), values), status_code=400)
     return redirect(f"/items/{item.id}")
 
 
@@ -648,11 +744,7 @@ def new_item(
     wishlist_id: int = 0,
 ):
     ensure_defaults(db, user)
-    return render(
-        request,
-        "item_form.html",
-        common_context(db, user) | {"active": "add", "item": None, "wishlist_id": wishlist_id},
-    )
+    return render(request, "item_form.html", item_form_context(db, user, wishlist_id))
 
 
 @app.get("/items/{item_id}", response_class=HTMLResponse)
@@ -664,26 +756,13 @@ def item_detail(
     tab: str = "overview",
 ):
     item = scoped_item(db, user, item_id)
-    saved = item_saved_total(db, item.id)
-    target = item_target(item)
     selected_tab = tab if tab in {"overview", "budget", "details"} else "overview"
-    return render(
-        request,
-        "item_detail.html",
-        common_context(db, user)
-        | {
-            "active": "lists",
-            "item": item,
-            "selected_tab": selected_tab,
-            "saved": saved,
-            "target": target,
-            "progress": progress_percent(saved, target),
-        },
-    )
+    return render(request, "item_detail.html", item_detail_context(db, user, item, selected_tab))
 
 
 @app.post("/items/{item_id}")
 def update_item(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
     csrf: Annotated[None, Depends(validate_csrf)],
@@ -701,25 +780,42 @@ def update_item(
     notes: Annotated[str, Form()] = "",
 ):
     item = scoped_item(db, user, item_id)
-    wishlist = scoped_wishlist(db, user, wishlist_id)
-    item.title = required_text(title, "Item title")
-    item.wishlist_id = wishlist.id
-    category = scoped_category(db, user, category_id)
-    item.category_id = category.id if category else None
-    item.status = item_status_or_400(status)
-    item.rank = rank
-    item.price_min = decimal_or_none(price_min)
-    item.price_avg = decimal_or_none(price_avg)
-    item.price_max = decimal_or_none(price_max)
-    item.actual_price = decimal_or_none(actual_price)
-    item.url = external_url_or_none(url)
-    item.notes = notes.strip() or None
-    commit_or_400(db, "Unable to update item.")
+    values = {
+        "title": title,
+        "wishlist_id": wishlist_id,
+        "category_id": category_id,
+        "status": status,
+        "rank": rank,
+        "price_min": price_min,
+        "price_avg": price_avg,
+        "price_max": price_max,
+        "actual_price": actual_price,
+        "url": url,
+        "notes": notes,
+    }
+    try:
+        wishlist = scoped_wishlist(db, user, wishlist_id)
+        item.title = required_text(title, "Item title")
+        item.wishlist_id = wishlist.id
+        category = scoped_category(db, user, category_id)
+        item.category_id = category.id if category else None
+        item.status = item_status_or_400(status)
+        item.rank = rank
+        item.price_min = decimal_or_none(price_min)
+        item.price_avg = decimal_or_none(price_avg)
+        item.price_max = decimal_or_none(price_max)
+        item.actual_price = decimal_or_none(actual_price)
+        item.url = external_url_or_none(url)
+        item.notes = notes.strip() or None
+        commit_or_400(db, "Unable to update item.")
+    except FormError as exc:
+        return render(request, "item_detail.html", item_detail_context(db, user, item, "details", str(exc), "details", values), status_code=400)
     return redirect(f"/items/{item.id}")
 
 
 @app.post("/items/{item_id}/savings")
 def create_savings_entry(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
     csrf: Annotated[None, Depends(validate_csrf)],
@@ -729,21 +825,26 @@ def create_savings_entry(
     note: Annotated[str, Form()] = "",
 ):
     item = scoped_item(db, user, item_id)
-    account = scoped_account(db, user, account_id)
-    add_savings_entry(
-        db,
-        user_id=user.id,
-        item=item,
-        amount=decimal_required(amount),
-        account_id=account.id if account else None,
-        kind=SavingsEntryKind.manual,
-        note=note.strip() or None,
-    )
+    values = {"amount": amount, "account_id": account_id, "note": note}
+    try:
+        account = scoped_account(db, user, account_id)
+        add_savings_entry(
+            db,
+            user_id=user.id,
+            item=item,
+            amount=decimal_required(amount),
+            account_id=account.id if account else None,
+            kind=SavingsEntryKind.manual,
+            note=note.strip() or None,
+        )
+    except FormError as exc:
+        return render(request, "item_detail.html", item_detail_context(db, user, item, "budget", str(exc), "savings", values), status_code=400)
     return redirect(f"/items/{item.id}?tab=budget")
 
 
 @app.post("/items/{item_id}/recurring-rule")
 def upsert_recurring_rule(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
     csrf: Annotated[None, Depends(validate_csrf)],
@@ -755,30 +856,43 @@ def upsert_recurring_rule(
     active: Annotated[str | None, Form()] = None,
 ):
     item = scoped_item(db, user, item_id)
-    account = scoped_account(db, user, account_id)
-    run_at = parse_datetime_or_400(next_run_at)
-    rule = item.savings_rule or SavingsRule(user_id=user.id, item_id=item.id)
-    rule.amount = decimal_required(amount)
-    rule.cadence = cadence_or_400(cadence)
-    rule.account_id = account.id if account else None
-    rule.next_run_at = run_at
-    rule.active = active == "on"
-    item.status = ItemStatus.saving if item.status in (ItemStatus.idea, ItemStatus.planned) else item.status
-    db.add(rule)
-    commit_or_400(db, "Unable to save recurring rule.")
+    values = {"amount": amount, "cadence": cadence, "account_id": account_id, "next_run_at": next_run_at, "active": active}
+    try:
+        account = scoped_account(db, user, account_id)
+        run_at = parse_datetime_or_400(next_run_at)
+        rule = item.savings_rule or SavingsRule(user_id=user.id, item_id=item.id)
+        rule.amount = decimal_required(amount)
+        rule.cadence = cadence_or_400(cadence)
+        rule.account_id = account.id if account else None
+        rule.next_run_at = run_at
+        rule.active = active == "on"
+        item.status = ItemStatus.saving if item.status in (ItemStatus.idea, ItemStatus.planned) else item.status
+        db.add(rule)
+        commit_or_400(db, "Unable to save recurring rule.")
+    except FormError as exc:
+        return render(request, "item_detail.html", item_detail_context(db, user, item, "budget", str(exc), "recurring", values), status_code=400)
     return redirect(f"/items/{item.id}?tab=budget")
 
 
 @app.post("/categories")
 def create_category(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
     csrf: Annotated[None, Depends(validate_csrf)],
     name: Annotated[str, Form()],
     color: Annotated[str, Form()] = "#8b8f78",
 ):
-    db.add(Category(user_id=user.id, name=required_text(name, "Category name"), color=color_or_400(color)))
-    commit_or_400(db, "A category with that name already exists.")
+    try:
+        db.add(Category(user_id=user.id, name=required_text(name, "Category name"), color=color_or_400(color)))
+        commit_or_400(db, "A category with that name already exists.")
+    except FormError as exc:
+        return render(
+            request,
+            "settings.html",
+            settings_context(db, user, {"categories": str(exc)}, {"categories": {"name": name, "color": color}}),
+            status_code=400,
+        )
     return redirect("/settings")
 
 
@@ -788,30 +902,31 @@ def accounts(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
 ):
-    rows = []
-    for account in db.scalars(select(SavingAccount).where(SavingAccount.user_id == user.id).order_by(SavingAccount.archived, SavingAccount.name)).all():
-        total = money(db.scalar(select(func.coalesce(func.sum(SavingsEntry.amount), 0)).where(SavingsEntry.account_id == account.id)))
-        rows.append({"account": account, "total": total})
-    return render(request, "accounts.html", common_context(db, user) | {"active": "accounts", "rows": rows})
+    return render(request, "accounts.html", accounts_context(db, user))
 
 
 @app.post("/accounts")
 def create_account(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
     csrf: Annotated[None, Depends(validate_csrf)],
     name: Annotated[str, Form()],
     is_default: Annotated[str | None, Form()] = None,
 ):
-    if is_default:
-        db.query(SavingAccount).filter(SavingAccount.user_id == user.id).update({"is_default": False})
-    db.add(SavingAccount(user_id=user.id, name=required_text(name, "Account name"), is_default=bool(is_default)))
-    commit_or_400(db, "An account with that name already exists.")
+    try:
+        if is_default:
+            db.query(SavingAccount).filter(SavingAccount.user_id == user.id).update({"is_default": False})
+        db.add(SavingAccount(user_id=user.id, name=required_text(name, "Account name"), is_default=bool(is_default)))
+        commit_or_400(db, "An account with that name already exists.")
+    except FormError as exc:
+        return render(request, "accounts.html", accounts_context(db, user, str(exc), {"name": name, "is_default": bool(is_default)}), status_code=400)
     return redirect("/accounts")
 
 
 @app.post("/accounts/{account_id}")
 def update_account(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
     csrf: Annotated[None, Depends(validate_csrf)],
@@ -823,12 +938,15 @@ def update_account(
     account = db.get(SavingAccount, account_id)
     if not account or account.user_id != user.id:
         raise HTTPException(status_code=404)
-    if is_default:
-        db.query(SavingAccount).filter(SavingAccount.user_id == user.id).update({"is_default": False})
-    account.name = required_text(name, "Account name")
-    account.archived = bool(archived)
-    account.is_default = bool(is_default)
-    commit_or_400(db, "An account with that name already exists.")
+    try:
+        if is_default:
+            db.query(SavingAccount).filter(SavingAccount.user_id == user.id).update({"is_default": False})
+        account.name = required_text(name, "Account name")
+        account.archived = bool(archived)
+        account.is_default = bool(is_default)
+        commit_or_400(db, "An account with that name already exists.")
+    except FormError as exc:
+        return render(request, "accounts.html", accounts_context(db, user, str(exc), {"account_id": account_id, "name": name}), status_code=400)
     return redirect("/accounts")
 
 
@@ -838,11 +956,12 @@ def settings_page(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
 ):
-    return render(request, "settings.html", common_context(db, user) | {"active": "settings"})
+    return render(request, "settings.html", settings_context(db, user))
 
 
 @app.post("/settings/users")
 def create_user_from_settings(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
     csrf: Annotated[None, Depends(validate_csrf)],
@@ -855,13 +974,19 @@ def create_user_from_settings(
     try:
         new_user = create_user(db, username=username, password=password, display_name=display_name or username)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return render(
+            request,
+            "settings.html",
+            settings_context(db, user, {"users": str(exc)}, {"users": {"username": username, "display_name": display_name}}),
+            status_code=400,
+        )
     ensure_defaults(db, new_user)
     return redirect("/settings")
 
 
 @app.post("/settings/password")
 def change_password(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
     csrf: Annotated[None, Depends(validate_csrf)],
@@ -869,9 +994,14 @@ def change_password(
     new_password: Annotated[str, Form()],
 ):
     if not verify_password(current_password, user.password_hash):
-        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+        return render(request, "settings.html", settings_context(db, user, {"password": "Current password is incorrect."}), status_code=400)
     if len(new_password) < MIN_PASSWORD_LENGTH:
-        raise HTTPException(status_code=400, detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
+        return render(
+            request,
+            "settings.html",
+            settings_context(db, user, {"password": f"Password must be at least {MIN_PASSWORD_LENGTH} characters."}),
+            status_code=400,
+        )
     user.password_hash = hash_password(new_password)
     db.commit()
     return redirect("/settings")
@@ -879,15 +1009,24 @@ def change_password(
 
 @app.post("/settings/preferences")
 def update_preferences(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
     csrf: Annotated[None, Depends(validate_csrf)],
     currency: Annotated[str, Form()],
     timezone_name: Annotated[str, Form()],
 ):
-    user.currency = currency_or_400(currency)
-    user.timezone = timezone_or_400(timezone_name)
-    db.commit()
+    try:
+        user.currency = currency_or_400(currency)
+        user.timezone = timezone_or_400(timezone_name)
+        db.commit()
+    except FormError as exc:
+        return render(
+            request,
+            "settings.html",
+            settings_context(db, user, {"preferences": str(exc)}, {"preferences": {"currency": currency, "timezone_name": timezone_name}}),
+            status_code=400,
+        )
     return redirect("/settings")
 
 

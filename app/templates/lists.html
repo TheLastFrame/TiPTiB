@@ -27,8 +27,9 @@
     <form class="form" method="post" action="/lists">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <h2>Add wishlist</h2>
-      <input class="input" name="name" placeholder="Moving House" required>
-      <input class="input" name="description" placeholder="Optional note">
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      <input class="input" name="name" placeholder="Moving House" value="{{ values.get('name', '') }}" required>
+      <input class="input" name="description" placeholder="Optional note" value="{{ values.get('description', '') }}">
       <button class="button" type="submit">Create list</button>
     </form>
   </section>

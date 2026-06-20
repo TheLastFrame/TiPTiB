@@ -19,7 +19,8 @@
         </div>
         <form class="form" method="post" action="/accounts/{{ row.account.id }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <input class="input" name="name" value="{{ row.account.name }}" required>
+          {% if error and values.get("account_id") == row.account.id %}<p class="error">{{ error }}</p>{% endif %}
+          <input class="input" name="name" value="{{ values.get('name', row.account.name) if values.get('account_id') == row.account.id else row.account.name }}" required>
           <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="is_default" {{ "checked" if row.account.is_default else "" }}> Default</label>
           <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="archived" {{ "checked" if row.account.archived else "" }}> Archived</label>
           <button class="button secondary" type="submit">Save account</button>
@@ -32,8 +33,9 @@
     <form class="form" method="post" action="/accounts">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <h2>Add account</h2>
-      <input class="input" name="name" placeholder="ING Savings" required>
-      <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="is_default"> Default</label>
+      {% if error and not values.get("account_id") %}<p class="error">{{ error }}</p>{% endif %}
+      <input class="input" name="name" placeholder="ING Savings" value="{{ values.get('name', '') if not values.get('account_id') else '' }}" required>
+      <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="is_default" {{ "checked" if values.get("is_default") and not values.get("account_id") else "" }}> Default</label>
       <button class="button" type="submit">Create account</button>
     </form>
   </section>

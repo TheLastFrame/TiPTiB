@@ -12,13 +12,14 @@
       <form class="form" method="post" action="/settings/preferences">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <h2>Preferences</h2>
+        {% if errors.get("preferences") %}<p class="error">{{ errors.get("preferences") }}</p>{% endif %}
         <div class="field">
           <label>Currency</label>
-          <input class="input" name="currency" value="{{ user.currency }}" maxlength="3" required>
+          <input class="input" name="currency" value="{{ values.get('preferences', {}).get('currency', user.currency) }}" maxlength="3" required>
         </div>
         <div class="field">
           <label>Timezone</label>
-          <input class="input" name="timezone_name" value="{{ user.timezone }}" required>
+          <input class="input" name="timezone_name" value="{{ values.get('preferences', {}).get('timezone_name', user.timezone) }}" required>
         </div>
         <button class="button secondary" type="submit">Save preferences</button>
       </form>
@@ -28,6 +29,7 @@
       <form class="form" method="post" action="/settings/password">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <h2>Password</h2>
+        {% if errors.get("password") %}<p class="error">{{ errors.get("password") }}</p>{% endif %}
         <input class="input" name="current_password" type="password" placeholder="Current password" autocomplete="current-password" required>
         <input class="input" name="new_password" type="password" placeholder="New password" autocomplete="new-password" required>
         <button class="button secondary" type="submit">Change password</button>
@@ -44,13 +46,14 @@
       <form class="form" method="post" action="/categories">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <h2>Categories</h2>
+        {% if errors.get("categories") %}<p class="error">{{ errors.get("categories") }}</p>{% endif %}
         {% for category in categories %}
           <div class="row"><span class="chip" style="border-left: 4px solid {{ category.color }}">{{ category.name }}</span></div>
         {% else %}
           <p>No categories yet.</p>
         {% endfor %}
-        <input class="input" name="name" placeholder="Furniture" required>
-        <input class="input" name="color" type="color" value="#8b8f78">
+        <input class="input" name="name" placeholder="Furniture" value="{{ values.get('categories', {}).get('name', '') }}" required>
+        <input class="input" name="color" type="color" value="{{ values.get('categories', {}).get('color', '#8b8f78') }}">
         <button class="button secondary" type="submit">Add category</button>
       </form>
     </article>
@@ -59,9 +62,10 @@
       <form class="form" method="post" action="/settings/users">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <h2>Add user</h2>
+        {% if errors.get("users") %}<p class="error">{{ errors.get("users") }}</p>{% endif %}
         {% if not user.is_admin %}<p>Only admins can add users.</p>{% endif %}
-        <input class="input" name="display_name" placeholder="Display name" {{ "disabled" if not user.is_admin else "" }}>
-        <input class="input" name="username" placeholder="Username" required {{ "disabled" if not user.is_admin else "" }}>
+        <input class="input" name="display_name" placeholder="Display name" value="{{ values.get('users', {}).get('display_name', '') }}" {{ "disabled" if not user.is_admin else "" }}>
+        <input class="input" name="username" placeholder="Username" value="{{ values.get('users', {}).get('username', '') }}" required {{ "disabled" if not user.is_admin else "" }}>
         <input class="input" name="password" type="password" placeholder="Password" required {{ "disabled" if not user.is_admin else "" }}>
         <button class="button secondary" type="submit" {{ "disabled" if not user.is_admin else "" }}>Create private user</button>
       </form>

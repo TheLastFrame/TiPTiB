@@ -77,18 +77,25 @@ def test_setup_login_create_item_and_pwa_routes():
         response = client.get("/")
         assert response.status_code == 200
         assert "Set up TiPTiB" in response.text
+        assert "data-back-button" not in response.text
 
         setup_admin(client)
 
         response = client.get("/dashboard")
         assert response.status_code == 200
         assert "buy plan" in response.text
+        assert "data-back-button" not in response.text
 
         token = csrf_from(client, "/items/new")
+        response = client.get("/items/new")
+        assert response.status_code == 200
+        assert "data-back-button" not in response.text
+
         response = client.get("/lists")
         assert response.status_code == 200
         assert "Your plans" in response.text
         assert 'href="/lists/1"' in response.text
+        assert "data-back-button" not in response.text
 
         response = client.post(
             "/items",
@@ -172,6 +179,7 @@ def test_setup_login_create_item_and_pwa_routes():
         response = client.get("/lists/1")
         assert response.status_code == 200
         assert "Dining table" in response.text
+        assert 'data-back-button aria-label="Go back"' in response.text
         assert 'href="/items/2"' in response.text
         assert '<details class="filter-drawer">' in response.text
         assert "shown</span>" not in response.text
@@ -211,6 +219,7 @@ def test_setup_login_create_item_and_pwa_routes():
         item_url = response = client.get("/items/1")
         assert item_url.status_code == 200
         assert "Overview" in item_url.text
+        assert 'data-back-button aria-label="Go back"' in item_url.text
         assert "Open budget" not in item_url.text
         assert "0% saved" not in item_url.text
         budget_response = client.get("/items/1?tab=budget")
@@ -242,6 +251,7 @@ def test_setup_login_create_item_and_pwa_routes():
         response = client.get("/history")
         assert response.status_code == 200
         assert "Dining table" in response.text
+        assert 'data-back-button aria-label="Go back"' in response.text
 
         token = csrf_from(client, "/settings")
         response = client.post(
@@ -253,6 +263,11 @@ def test_setup_login_create_item_and_pwa_routes():
         response = client.get("/settings")
         assert "USD" in response.text
         assert "UTC" in response.text
+        assert "data-back-button" not in response.text
+
+        response = client.get("/accounts")
+        assert response.status_code == 200
+        assert "data-back-button" not in response.text
 
         token = csrf_from(client, "/settings")
         response = client.post(
@@ -262,6 +277,9 @@ def test_setup_login_create_item_and_pwa_routes():
         )
         assert response.status_code == 303
         logout(client)
+        response = client.get("/login")
+        assert response.status_code == 200
+        assert "data-back-button" not in response.text
         login(client, password="new-long-password")
 
         assert client.get("/manifest.webmanifest").json()["short_name"] == "TiPTiB"
@@ -401,6 +419,9 @@ def test_bad_inputs_are_controlled_responses():
             follow_redirects=False,
         )
         assert response.status_code == 400
+        assert "text/html" in response.headers["content-type"]
+        assert "Invalid item status." in response.text
+        assert "Add a plan" in response.text
 
         response = client.post(
             "/items",
@@ -408,6 +429,8 @@ def test_bad_inputs_are_controlled_responses():
             follow_redirects=False,
         )
         assert response.status_code == 400
+        assert "Invalid money amount." in response.text
+        assert "Bad money" in response.text
 
         response = client.post(
             "/items",
@@ -415,6 +438,7 @@ def test_bad_inputs_are_controlled_responses():
             follow_redirects=False,
         )
         assert response.status_code == 400
+        assert "Links must use http or https." in response.text
 
         response = client.post(
             "/items",
@@ -431,11 +455,74 @@ def test_bad_inputs_are_controlled_responses():
             follow_redirects=False,
         )
         assert response.status_code == 400
+        assert "Recurring deposit" in response.text
+        assert "Invalid recurrence cadence." in response.text
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/savings",
+            data=with_csrf(token, {"amount": "nope", "account_id": 0}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
+        assert "Savings" in response.text
+        assert "Invalid amount." in response.text
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/password",
+            data=with_csrf(token, {"current_password": ADMIN_PASSWORD, "new_password": "short"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
+        assert "Settings" in response.text
+        assert "Password must be at least 12 characters." in response.text
+        assert "short" not in response.text
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/preferences",
+            data=with_csrf(token, {"currency": "EURO", "timezone_name": "UTC"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
+        assert "Currency must be a 3-letter code." in response.text
+        assert 'value="EURO"' in response.text
+        response = client.get("/settings")
+        assert "EURO" not in response.text
 
         token = csrf_from(client, "/settings")
         response = client.post("/categories", data=with_csrf(token, {"name": "Bad color", "color": "red"}), follow_redirects=False)
         assert response.status_code == 400
+        assert "Invalid color." in response.text
+        assert "Settings" in response.text
+
+        token = csrf_from(client, "/settings")
+        response = client.post("/categories", data=with_csrf(token, {"name": "Furniture", "color": "#8b8f78"}), follow_redirects=False)
+        assert response.status_code == 303
+        token = csrf_from(client, "/settings")
+        response = client.post("/categories", data=with_csrf(token, {"name": "Furniture", "color": "#8b8f78"}), follow_redirects=False)
+        assert response.status_code == 400
+        assert "A category with that name already exists." in response.text
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/users",
+            data=with_csrf(token, {"display_name": "Fabian Again", "username": "fabian", "password": "another-long-password"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
+        assert "Username already exists." in response.text
+        assert "another-long-password" not in response.text
 
         token = csrf_from(client, "/lists")
         response = client.post("/lists", data=with_csrf(token, {"name": "General"}), follow_redirects=False)
         assert response.status_code == 400
+        assert "Your plans" in response.text
+        assert "A wishlist with that name already exists." in response.text
+
+        token = csrf_from(client, "/accounts")
+        response = client.post("/accounts", data=with_csrf(token, {"name": "Cash"}), follow_redirects=False)
+        assert response.status_code == 400
+        assert "Saving accounts" in response.text
+        assert "An account with that name already exists." in response.text

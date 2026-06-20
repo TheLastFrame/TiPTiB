@@ -8,16 +8,17 @@
   <section class="panel">
     <form class="form" method="post" action="/items">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
       <div class="grid two">
         <div class="field">
           <label>Title</label>
-          <input class="input" name="title" required placeholder="Dining table">
+          <input class="input" name="title" required placeholder="Dining table" value="{{ values.get('title', '') }}">
         </div>
         <div class="field">
           <label>Wishlist</label>
           <select class="input" name="wishlist_id" required>
             {% for wishlist in wishlists %}
-              <option value="{{ wishlist.id }}" {{ "selected" if wishlist_id == wishlist.id else "" }}>{{ wishlist.name }}</option>
+              <option value="{{ wishlist.id }}" {{ "selected" if (values.get('wishlist_id', wishlist_id)|int) == wishlist.id else "" }}>{{ wishlist.name }}</option>
             {% endfor %}
           </select>
         </div>
@@ -25,21 +26,21 @@
           <label>Category</label>
           <select class="input" name="category_id">
             <option value="0">No category</option>
-            {% for category in categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}
+            {% for category in categories %}<option value="{{ category.id }}" {{ "selected" if (values.get('category_id', 0)|int) == category.id else "" }}>{{ category.name }}</option>{% endfor %}
           </select>
         </div>
         <div class="field">
           <label>Status</label>
           <select class="input" name="status">
-            {% for status in item_statuses %}<option value="{{ status.value }}">{{ status.value }}</option>{% endfor %}
+            {% for status in item_statuses %}<option value="{{ status.value }}" {{ "selected" if values.get('status', 'idea') == status.value else "" }}>{{ status.value }}</option>{% endfor %}
           </select>
         </div>
-        <div class="field"><label>Min price</label><input class="input" name="price_min" inputmode="decimal"></div>
-        <div class="field"><label>Average price</label><input class="input" name="price_avg" inputmode="decimal"></div>
-        <div class="field"><label>Max price</label><input class="input" name="price_max" inputmode="decimal"></div>
-        <div class="field"><label>Link</label><input class="input" name="url" type="url"></div>
+        <div class="field"><label>Min price</label><input class="input" name="price_min" inputmode="decimal" value="{{ values.get('price_min', '') }}"></div>
+        <div class="field"><label>Average price</label><input class="input" name="price_avg" inputmode="decimal" value="{{ values.get('price_avg', '') }}"></div>
+        <div class="field"><label>Max price</label><input class="input" name="price_max" inputmode="decimal" value="{{ values.get('price_max', '') }}"></div>
+        <div class="field"><label>Link</label><input class="input" name="url" type="url" value="{{ values.get('url', '') }}"></div>
       </div>
-      <div class="field"><label>Notes</label><textarea class="input" name="notes"></textarea></div>
+      <div class="field"><label>Notes</label><textarea class="input" name="notes">{{ values.get('notes', '') }}</textarea></div>
       <button class="button" type="submit">Create item</button>
     </form>
   </section>

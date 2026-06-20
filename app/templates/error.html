@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ status_code }} - TiPTiB{% endblock %}
+{% block content %}
+  <section class="hero">
+    <span class="eyebrow">Something needs attention</span>
+    <h1>{{ status_code }}</h1>
+    <p>{{ detail }}</p>
+  </section>
+
+  <section class="panel stack">
+    <p>The request could not be completed.</p>
+    <a class="button secondary" href="/dashboard">Back to dashboard</a>
+  </section>
+{% endblock %}
