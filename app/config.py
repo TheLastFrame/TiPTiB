@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     bootstrap_username: str | None = None
     bootstrap_password: str | None = None
     scheduler_enabled: bool = True
+    run_migrations_on_startup: bool = True
     login_rate_limit_attempts: int = 5
     login_rate_limit_window_seconds: int = 5 * 60
 
