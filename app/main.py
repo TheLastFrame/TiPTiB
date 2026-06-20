@@ -295,6 +295,23 @@ def parse_datetime_or_400(value: str, user: User | None = None) -> datetime:
     return run_at.astimezone(timezone.utc)
 
 
+def parse_optional_date_or_400(value: str, user: User | None = None) -> datetime | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    try:
+        happened_at = datetime.fromisoformat(cleaned)
+    except ValueError as exc:
+        raise FormError("Invalid deposit date.") from exc
+    if happened_at.tzinfo is None:
+        timezone_name = getattr(user, "timezone", None) or settings.default_timezone
+        try:
+            happened_at = happened_at.replace(tzinfo=ZoneInfo(timezone_name))
+        except ZoneInfoNotFoundError:
+            happened_at = happened_at.replace(tzinfo=ZoneInfo(settings.default_timezone))
+    return happened_at.astimezone(timezone.utc)
+
+
 def external_url_or_none(value: str) -> str | None:
     url = value.strip()
     if not url:
@@ -1193,9 +1210,10 @@ def create_savings_entry(
     amount: Annotated[str, Form()],
     account_id: Annotated[int, Form()] = 0,
     note: Annotated[str, Form()] = "",
+    deposit_date: Annotated[str, Form()] = "",
 ):
     item = scoped_item(db, user, item_id)
-    values = {"amount": amount, "account_id": account_id, "note": note}
+    values = {"amount": amount, "account_id": account_id, "note": note, "deposit_date": deposit_date}
     try:
         account = scoped_account(db, user, account_id)
         add_savings_entry(
@@ -1206,6 +1224,7 @@ def create_savings_entry(
             account_id=account.id if account else None,
             kind=SavingsEntryKind.manual,
             note=note.strip() or None,
+            scheduled_for=parse_optional_date_or_400(deposit_date, user),
         )
     except FormError as exc:
         return render(request, "item_detail.html", item_detail_context(db, user, item, "budget", str(exc), "savings", values), status_code=400)

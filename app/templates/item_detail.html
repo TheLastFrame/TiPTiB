@@ -62,6 +62,7 @@
             {% if error and error_form == "savings" %}<p class="error">{{ error }}</p>{% endif %}
             <div class="grid two">
               <div class="field"><label>Amount</label><input class="input" name="amount" value="{{ values.get('amount', '') if error_form == 'savings' else '' }}" inputmode="decimal" required></div>
+              <div class="field"><label>Date</label><input class="input" name="deposit_date" type="date" value="{{ values.get('deposit_date', '') if error_form == 'savings' else '' }}"></div>
               <div class="field">
                 <label>Account</label>
                 <select class="input" name="account_id">
@@ -69,8 +70,8 @@
                   {% for account in accounts %}<option value="{{ account.id }}" {{ "selected" if error_form == "savings" and (values.get('account_id', 0)|int) == account.id else "" }}>{{ account.name }}</option>{% endfor %}
                 </select>
               </div>
+              <div class="field"><label>Note</label><input class="input" name="note" placeholder="Optional note" value="{{ values.get('note', '') if error_form == 'savings' else '' }}"></div>
             </div>
-            <input class="input" name="note" placeholder="Optional note" value="{{ values.get('note', '') if error_form == 'savings' else '' }}">
             <button class="button" type="submit">Add virtual deposit</button>
           </form>
         </article>
@@ -147,7 +148,7 @@
           <div class="row">
             <div>
               <strong>{{ entry.amount|money }}</strong>
-              <p>{{ entry.kind.value }}{% if entry.account %} · {{ entry.account.name }}{% endif %}{% if entry.note %} · {{ entry.note }}{% endif %}</p>
+              <p>{{ entry.kind.value }} · {{ (entry.scheduled_for or entry.created_at)|datetime_display }}{% if entry.account %} · {{ entry.account.name }}{% endif %}{% if entry.note %} · {{ entry.note }}{% endif %}</p>
             </div>
             <form method="post" action="/items/{{ item.id }}/savings/{{ entry.id }}/delete">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

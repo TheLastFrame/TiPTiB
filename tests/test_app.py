@@ -624,6 +624,71 @@ def test_budget_deposit_history_chart_uses_cumulative_deposits():
         assert all(point["account"] == "Cash" for point in chart["points"])
 
 
+def test_manual_deposit_can_be_backdated_with_optional_date():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/preferences",
+            data=with_csrf(token, {"currency": "EUR", "timezone_name": "UTC"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Backdated camera", "status": "planned", "price_avg": "100"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/savings",
+            data=with_csrf(token, {"amount": "25", "account_id": 1, "note": "Old envelope", "deposit_date": "2024-02-03"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        budget_response = client.get(f"/items/{item_id}?tab=budget")
+        assert budget_response.status_code == 200
+        assert "manual · 2024-02-03 00:00 · Cash · Old envelope" in budget_response.text
+
+        chart = chart_payload(budget_response.text)
+        assert [point["label"] for point in chart["points"]] == ["2024-02-03 00:00"]
+        assert [point["amount"] for point in chart["points"]] == [25.0]
+        assert [point["cumulative"] for point in chart["points"]] == [25.0]
+
+
+def test_manual_deposit_rejects_invalid_optional_date_and_preserves_values():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Invalid date camera", "status": "planned", "price_avg": "100"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/savings",
+            data=with_csrf(token, {"amount": "25", "account_id": 1, "note": "Keep me", "deposit_date": "not-a-date"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
+        assert "Invalid deposit date." in response.text
+        assert 'name="amount" value="25"' in response.text
+        assert 'name="deposit_date" type="date" value="not-a-date"' in response.text
+        assert 'name="note" placeholder="Optional note" value="Keep me"' in response.text
+
+
 def test_budget_deposit_history_chart_includes_recurring_estimate_overlay():
     with TestClient(app) as client:
         setup_admin(client)
