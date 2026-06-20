@@ -37,6 +37,7 @@
       <a class="nav-item {{ 'active' if active == 'accounts' else '' }}" href="/accounts">Accounts</a>
       <a class="nav-item {{ 'active' if active == 'settings' else '' }}" href="/settings">Settings</a>
     </nav>
+    {% block scripts %}{% endblock %}
     <script src="/static/app.js" defer></script>
   </body>
 </html>

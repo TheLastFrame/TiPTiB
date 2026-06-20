@@ -1,4 +1,5 @@
 import html
+import json
 import os
 import re
 import tempfile
@@ -534,6 +535,61 @@ def test_money_forms_accept_comma_decimal_and_currency_symbols():
         assert response.status_code == 303
         budget_response = client.get(f"/items/{item_id}?tab=budget")
         assert "100.10 EUR" in budget_response.text
+
+
+def test_budget_deposit_history_chart_uses_cumulative_deposits():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Chart camera", "status": "planned", "price_avg": "100"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        empty_response = client.get(f"/items/{item_id}?tab=budget")
+        assert empty_response.status_code == 200
+        assert "No deposits yet." in empty_response.text
+        assert "data-deposit-chart" not in empty_response.text
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/savings",
+            data=with_csrf(token, {"amount": "25", "account_id": 1, "note": "First push"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/savings",
+            data=with_csrf(token, {"amount": "10.50", "account_id": 1, "note": "Second push"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        budget_response = client.get(f"/items/{item_id}?tab=budget")
+        assert budget_response.status_code == 200
+        assert '<script src="/static/vendor/chart.umd.min.js" defer></script>' in budget_response.text
+        assert "data-deposit-chart" in budget_response.text
+        assert "Savings history" in budget_response.text
+        assert "First push" in budget_response.text
+        assert "Second push" in budget_response.text
+
+        match = re.search(r"data-chart='([^']+)'", budget_response.text)
+        assert match, budget_response.text
+        chart = json.loads(html.unescape(match.group(1)))
+        assert chart["target"] == 100.0
+        assert chart["targetLabel"] == "100.00 EUR"
+        assert [point["amount"] for point in chart["points"]] == [25.0, 10.5]
+        assert [point["cumulative"] for point in chart["points"]] == [25.0, 35.5]
+        assert [point["amountLabel"] for point in chart["points"]] == ["25.00 EUR", "10.50 EUR"]
+        assert [point["cumulativeLabel"] for point in chart["points"]] == ["25.00 EUR", "35.50 EUR"]
+        assert all(point["kind"] == "manual" for point in chart["points"])
+        assert all(point["account"] == "Cash" for point in chart["points"])
 
 
 def test_users_cannot_see_each_others_items():

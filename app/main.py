@@ -104,8 +104,11 @@ class FormError(ValueError):
 
 @pass_context
 def money_filter(context, value: object | None) -> str:
+    return money_display(value, context.get("user"))
+
+
+def money_display(value: object | None, user: User | None = None) -> str:
     currency = settings.default_currency
-    user = context.get("user")
     if user is not None and getattr(user, "currency", None):
         currency = user.currency
     amount = money(value)
@@ -568,6 +571,46 @@ def item_form_context(
     return common_context(db, user) | {"active": "add", "item": None, "wishlist_id": wishlist_id, "error": error, "values": values or {}}
 
 
+def deposit_chart_data(item: Item, user: User, target: Decimal) -> dict[str, object] | None:
+    entries = sorted(
+        item.savings_entries,
+        key=lambda entry: (entry.scheduled_for or entry.created_at, entry.id),
+    )
+    if not entries:
+        return None
+
+    cumulative = Decimal("0.00")
+    labels = []
+    points = []
+    for entry in entries:
+        amount = money(entry.amount)
+        cumulative += amount
+        happened_at = entry.scheduled_for or entry.created_at
+        display_at = user_datetime(happened_at, user)
+        label = display_at.strftime("%Y-%m-%d %H:%M") if display_at else ""
+        labels.append(label)
+        points.append(
+            {
+                "label": label,
+                "amount": float(amount),
+                "amountLabel": money_display(amount, user),
+                "cumulative": float(cumulative),
+                "cumulativeLabel": money_display(cumulative, user),
+                "kind": entry.kind.value,
+                "account": entry.account.name if entry.account else "",
+                "note": entry.note or "",
+            }
+        )
+
+    return {
+        "labels": labels,
+        "points": points,
+        "target": float(target) if target > 0 else None,
+        "targetLabel": money_display(target, user) if target > 0 else "",
+        "currency": user.currency or settings.default_currency,
+    }
+
+
 def item_detail_context(
     db: Session,
     user: User,
@@ -595,6 +638,7 @@ def item_detail_context(
         "unit_price": unit_price,
         "progress": progress_percent(saved, target),
         "goal_estimate": goal_reach_estimate(saved=saved, target=target, rule=item.savings_rule),
+        "deposit_chart": deposit_chart_data(item, user, target),
         "show_back_button": True,
         "back_url": f"/lists/{item.wishlist_id}",
         "error": error,

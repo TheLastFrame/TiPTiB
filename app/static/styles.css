@@ -118,6 +118,15 @@ p { color: var(--muted); margin: 0; line-height: 1.5; }
   background: #e3efe8;
 }
 .progress span { display: block; height: 100%; width: var(--value, 0%); background: linear-gradient(90deg, var(--brand), var(--accent), var(--spark)); }
+.chart-frame {
+  position: relative;
+  min-height: 260px;
+  height: clamp(260px, 38vh, 340px);
+}
+.chart-frame canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
 .tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -177,6 +177,8 @@ document.addEventListener("change", (event) => {
   }
 });
 
+initDepositCharts();
+
 function clearLongpressTimer() {
   if (longpressTimer) {
     window.clearTimeout(longpressTimer);
@@ -188,5 +190,115 @@ function clearLongpressTimer() {
 function closeListActions() {
   document.querySelectorAll("[data-longpress-card].actions-open").forEach((card) => {
     card.classList.remove("actions-open");
+  });
+}
+
+function initDepositCharts() {
+  const charts = document.querySelectorAll("[data-deposit-chart]");
+  if (!charts.length || typeof Chart === "undefined") {
+    return;
+  }
+
+  charts.forEach((canvas) => {
+    let chartData;
+    try {
+      chartData = JSON.parse(canvas.dataset.chart || "{}");
+    } catch {
+      return;
+    }
+
+    const points = Array.isArray(chartData.points) ? chartData.points : [];
+    const labels = Array.isArray(chartData.labels) ? chartData.labels : [];
+    if (!points.length || !labels.length) {
+      return;
+    }
+
+    const datasets = [
+      {
+        label: "Saved",
+        data: points.map((point) => point.cumulative),
+        borderColor: "#0f766e",
+        backgroundColor: "rgba(15, 118, 110, 0.14)",
+        pointBackgroundColor: "#ff6b4a",
+        pointBorderColor: "#fffaf0",
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        fill: true,
+        tension: 0.28,
+      },
+    ];
+
+    if (typeof chartData.target === "number" && chartData.target > 0) {
+      datasets.push({
+        label: "Target",
+        data: labels.map(() => chartData.target),
+        borderColor: "#ff6b4a",
+        borderDash: [6, 5],
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: false,
+        tension: 0,
+      });
+    }
+
+    new Chart(canvas, {
+      type: "line",
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { intersect: false, mode: "index" },
+        plugins: {
+          legend: {
+            display: false,
+          },
+          tooltip: {
+            filter(context) {
+              return context.dataset.label !== "Target";
+            },
+            callbacks: {
+              label(context) {
+                const point = points[context.dataIndex];
+                return `Saved: ${point?.cumulativeLabel || context.formattedValue}`;
+              },
+              afterBody(items) {
+                const item = items.find((entry) => entry.dataset.label === "Saved");
+                if (!item) {
+                  return [];
+                }
+                const point = points[item.dataIndex];
+                if (!point) {
+                  return [];
+                }
+                return [
+                  `Deposit: ${point.amountLabel}`,
+                  `Kind: ${point.kind}`,
+                  point.account ? `Account: ${point.account}` : "",
+                  point.note ? `Note: ${point.note}` : "",
+                ].filter(Boolean);
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { color: "#65756f", maxRotation: 0, autoSkip: true, maxTicksLimit: 4 },
+            grid: { display: false },
+          },
+          y: {
+            beginAtZero: true,
+            ticks: {
+              color: "#65756f",
+              callback(value) {
+                return `${value} ${chartData.currency || ""}`.trim();
+              },
+            },
+            grid: { color: "rgba(216, 234, 223, 0.78)" },
+          },
+        },
+      },
+    });
   });
 }

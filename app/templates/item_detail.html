@@ -115,7 +115,25 @@
         </article>
       </div>
 
-      <aside class="panel stack">
+      <aside class="stack">
+        {% if deposit_chart %}
+          <article class="panel stack">
+            <div class="row wrap">
+              <h2>Deposit history</h2>
+              {% if deposit_chart.target %}<span class="pill">Target {{ deposit_chart.targetLabel }}</span>{% endif %}
+            </div>
+            <div class="chart-frame">
+              <canvas
+                data-deposit-chart
+                data-chart='{{ deposit_chart|tojson }}'
+                aria-label="Cumulative deposit history for {{ item.title }}"
+                role="img"
+              ></canvas>
+            </div>
+          </article>
+        {% endif %}
+
+        <article class="panel stack">
         <h2>Savings history</h2>
         {% for entry in item.savings_entries|sort(attribute="created_at", reverse=true) %}
           <div class="row">
@@ -127,6 +145,7 @@
         {% else %}
           <p>No deposits yet.</p>
         {% endfor %}
+        </article>
       </aside>
     </section>
   {% elif selected_tab == "details" %}
@@ -193,5 +212,10 @@
         {% endif %}
       </div>
     </section>
+  {% endif %}
+{% endblock %}
+{% block scripts %}
+  {% if selected_tab == "budget" and deposit_chart %}
+    <script src="/static/vendor/chart.umd.min.js" defer></script>
   {% endif %}
 {% endblock %}
