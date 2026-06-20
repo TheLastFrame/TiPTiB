@@ -303,7 +303,11 @@ def test_setup_login_create_item_and_pwa_routes():
             "params": {"title": "title", "text": "text", "url": "url"},
         }
         assert client.get("/static/sw.js").status_code == 200
-        assert client.get("/static/app.js").status_code == 200
+        app_js = client.get("/static/app.js")
+        assert app_js.status_code == 200
+        assert 'window.addEventListener("pageshow"' in app_js.text
+        assert 'window.location.pathname === "/lists"' in app_js.text
+        assert "window.location.reload()" in app_js.text
 
 
 def test_share_target_prefills_new_item_form():

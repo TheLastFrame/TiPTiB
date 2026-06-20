@@ -2,6 +2,12 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/static/sw.js");
 }
 
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted && window.location.pathname === "/lists") {
+    window.location.reload();
+  }
+});
+
 document.addEventListener("click", (event) => {
   const backButton = event.target.closest("[data-back-button]");
   if (backButton) {
