@@ -592,6 +592,149 @@ def test_budget_deposit_history_chart_uses_cumulative_deposits():
         assert all(point["account"] == "Cash" for point in chart["points"])
 
 
+def test_savings_entry_can_be_deleted_from_budget_history():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Delete camera", "status": "planned", "price_avg": "100"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/savings",
+            data=with_csrf(token, {"amount": "25", "account_id": 1, "note": "First push"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/savings",
+            data=with_csrf(token, {"amount": "10.50", "account_id": 1, "note": "Second push"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        budget_response = client.get(f"/items/{item_id}?tab=budget")
+        assert budget_response.status_code == 200
+        delete_match = re.search(
+            rf"First push</p>\s*</div>\s*<form method=\"post\" action=\"/items/{item_id}/savings/(\d+)/delete\"",
+            budget_response.text,
+        )
+        assert delete_match, budget_response.text
+
+        token = extract_csrf(budget_response.text)
+        response = client.post(
+            f"/items/{item_id}/savings/{delete_match.group(1)}/delete",
+            data=with_csrf(token),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert response.headers["location"] == f"/items/{item_id}?tab=budget"
+
+        budget_response = client.get(f"/items/{item_id}?tab=budget")
+        assert budget_response.status_code == 200
+        assert "First push" not in budget_response.text
+        assert "Second push" in budget_response.text
+        assert "10.50 EUR / 100.00 EUR" in budget_response.text
+
+        match = re.search(r"data-chart='([^']+)'", budget_response.text)
+        assert match, budget_response.text
+        chart = json.loads(html.unescape(match.group(1)))
+        assert [point["amount"] for point in chart["points"]] == [10.5]
+        assert [point["cumulative"] for point in chart["points"]] == [10.5]
+
+
+def test_users_cannot_delete_each_others_savings_entries():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Private ledger", "status": "planned", "price_avg": "100"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/savings",
+            data=with_csrf(token, {"amount": "25", "note": "Mine"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        budget_response = client.get(f"/items/{item_id}?tab=budget")
+        entry_match = re.search(rf"/items/{item_id}/savings/(\d+)/delete", budget_response.text)
+        assert entry_match, budget_response.text
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/users",
+            data=with_csrf(token, {"display_name": "Ada", "username": "ada", "password": "long-ada-password"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        logout(client)
+        login(client, username="ada", password="long-ada-password")
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            f"/items/{item_id}/savings/{entry_match.group(1)}/delete",
+            data=with_csrf(token),
+            follow_redirects=False,
+        )
+        assert response.status_code == 404
+
+
+def test_deleting_savings_entry_reverts_ready_item_below_target():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Ready camera", "status": "saving", "price_avg": "50"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/savings",
+            data=with_csrf(token, {"amount": "50", "note": "Fully funded"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        budget_response = client.get(f"/items/{item_id}?tab=budget")
+        assert "status-ready" in budget_response.text
+        entry_match = re.search(rf"/items/{item_id}/savings/(\d+)/delete", budget_response.text)
+        assert entry_match, budget_response.text
+
+        token = extract_csrf(budget_response.text)
+        response = client.post(
+            f"/items/{item_id}/savings/{entry_match.group(1)}/delete",
+            data=with_csrf(token),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        budget_response = client.get(f"/items/{item_id}?tab=budget")
+        assert "status-saving" in budget_response.text
+        assert "0.00 EUR / 50.00 EUR" in budget_response.text
+        assert "No deposits yet." in budget_response.text
+
+
 def test_users_cannot_see_each_others_items():
     with TestClient(app) as client:
         setup_admin(client)

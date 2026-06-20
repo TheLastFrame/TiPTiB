@@ -1189,6 +1189,33 @@ def create_savings_entry(
     return redirect(f"/items/{item.id}?tab=budget")
 
 
+@app.post("/items/{item_id}/savings/{entry_id}/delete")
+def delete_savings_entry(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
+    item_id: int,
+    entry_id: int,
+):
+    item = scoped_item(db, user, item_id)
+    entry = db.scalar(
+        select(SavingsEntry).where(
+            SavingsEntry.id == entry_id,
+            SavingsEntry.item_id == item.id,
+            SavingsEntry.user_id == user.id,
+        )
+    )
+    if not entry:
+        raise HTTPException(status_code=404)
+
+    db.delete(entry)
+    db.flush()
+    if item.status == ItemStatus.ready and item_saved_total(db, item.id) < item_target(item):
+        item.status = ItemStatus.saving
+    db.commit()
+    return redirect(f"/items/{item.id}?tab=budget")
+
+
 @app.post("/items/{item_id}/recurring-rule")
 def upsert_recurring_rule(
     request: Request,
