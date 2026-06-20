@@ -3,23 +3,56 @@
 {% block content %}
   <section class="hero">
     <span class="eyebrow">Wishlists</span>
-    <h1>Your plans</h1>
-    <p>Separate gadgets, moving house, furniture, and all the “not today, but soon” things.</p>
+    <div class="row wrap">
+      <h1>Your plans</h1>
+      {% if show_archived %}
+        <a class="button ghost" href="/lists">Hide archived</a>
+      {% elif archived_count %}
+        <a class="button ghost" href="/lists?show_archived=true">Show archived</a>
+      {% endif %}
+    </div>
+    <p>Separate gadgets, moving house, furniture, and all the "not today, but soon" things.</p>
   </section>
 
   <section class="grid two">
     {% for row in rows %}
-      <a class="card card-link" href="/lists/{{ row.wishlist.id }}" aria-label="Open {{ row.wishlist.name }}">
-        <div class="row">
-          <div>
-            <h2>{{ row.wishlist.name }}</h2>
-            <p>{{ row.item_count }} active items</p>
+      <article class="card list-card {{ 'is-archived' if row.wishlist.archived else '' }}" data-longpress-card>
+        <div class="list-card-head">
+          <a class="list-card-title" href="/lists/{{ row.wishlist.id }}" aria-label="Open {{ row.wishlist.name }}" data-longpress-link>
+            <div>
+              <h2>{{ row.wishlist.name }}</h2>
+              <p>{{ row.item_count }} active items{% if row.wishlist.archived %} · archived{% endif %}</p>
+            </div>
+          </a>
+          <div class="list-card-tools">
+            <span class="pill">{{ row.progress }}%</span>
+            <button class="icon-button list-actions-toggle" type="button" data-card-actions-toggle aria-label="List actions" title="List actions">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="1.5"></circle>
+                <circle cx="19" cy="12" r="1.5"></circle>
+                <circle cx="5" cy="12" r="1.5"></circle>
+              </svg>
+            </button>
           </div>
-          <span class="pill">{{ row.progress }}%</span>
         </div>
-        <div class="progress"><span style="--value: {{ row.progress }}%"></span></div>
-        <div class="row"><span>{{ row.total|money }} planned</span><strong>{{ row.saved|money }}</strong></div>
-      </a>
+        <a class="card-link list-card-main" href="/lists/{{ row.wishlist.id }}" aria-label="Open {{ row.wishlist.name }}" data-longpress-link>
+          <div class="progress"><span style="--value: {{ row.progress }}%"></span></div>
+          <div class="row"><span>{{ row.total|money }} planned</span><strong>{{ row.saved|money }}</strong></div>
+        </a>
+        <div class="list-actions" data-card-actions>
+          <form method="post" action="/lists/{{ row.wishlist.id }}/archive">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="archived" value="{{ 'false' if row.wishlist.archived else 'true' }}">
+            <button class="button secondary" type="submit">{{ "Unarchive" if row.wishlist.archived else "Archive" }}</button>
+          </form>
+          <form method="post" action="/lists/{{ row.wishlist.id }}/delete" data-confirm="Delete this list and all its items and savings entries?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="button danger" type="submit">Delete</button>
+          </form>
+        </div>
+      </article>
+    {% else %}
+      <article class="panel empty"><p>No lists here yet.</p></article>
     {% endfor %}
   </section>
 

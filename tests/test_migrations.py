@@ -18,3 +18,5 @@ def test_alembic_can_upgrade_fresh_sqlite_database(tmp_path: Path):
     assert "users" in inspector.get_table_names()
     user_columns = {column["name"] for column in inspector.get_columns("users")}
     assert {"currency", "timezone"}.issubset(user_columns)
+    wishlist_columns = {column["name"] for column in inspector.get_columns("wishlists")}
+    assert "archived" in wishlist_columns

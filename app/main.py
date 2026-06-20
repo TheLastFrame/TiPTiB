@@ -326,7 +326,9 @@ def sort_price_value(item: Item, sort_by: str) -> Decimal | int | None:
 def common_context(db: Session, user: User) -> dict[str, object]:
     return {
         "user": user,
-        "wishlists": db.scalars(select(Wishlist).where(Wishlist.user_id == user.id).order_by(Wishlist.name)).all(),
+        "wishlists": db.scalars(
+            select(Wishlist).where(Wishlist.user_id == user.id, Wishlist.archived.is_(False)).order_by(Wishlist.name)
+        ).all(),
         "categories": db.scalars(
             select(Category).where(Category.user_id == user.id, Category.archived.is_(False)).order_by(Category.name)
         ).all(),
@@ -338,9 +340,18 @@ def common_context(db: Session, user: User) -> dict[str, object]:
     }
 
 
-def lists_context(db: Session, user: User, error: str | None = None, values: dict[str, object] | None = None) -> dict[str, object]:
+def lists_context(
+    db: Session,
+    user: User,
+    show_archived: bool = False,
+    error: str | None = None,
+    values: dict[str, object] | None = None,
+) -> dict[str, object]:
     rows = []
-    for wishlist in db.scalars(select(Wishlist).where(Wishlist.user_id == user.id).order_by(Wishlist.name)).all():
+    wishlist_query = select(Wishlist).where(Wishlist.user_id == user.id).order_by(Wishlist.archived, Wishlist.name)
+    if not show_archived:
+        wishlist_query = wishlist_query.where(Wishlist.archived.is_(False))
+    for wishlist in db.scalars(wishlist_query).all():
         items = db.scalars(select(Item).where(Item.user_id == user.id, Item.wishlist_id == wishlist.id, Item.status.in_(ACTIVE_STATUSES))).all()
         total = sum((item_target(item) for item in items if item.status in PLANNED_TOTAL_STATUSES), Decimal("0.00"))
         saved = money(
@@ -359,7 +370,17 @@ def lists_context(db: Session, user: User, error: str | None = None, values: dic
                 "progress": progress_percent(saved, total),
             }
         )
-    return common_context(db, user) | {"active": "lists", "rows": rows, "error": error, "values": values or {}}
+    archived_count = db.scalar(
+        select(func.count(Wishlist.id)).where(Wishlist.user_id == user.id, Wishlist.archived.is_(True))
+    )
+    return common_context(db, user) | {
+        "active": "lists",
+        "rows": rows,
+        "show_archived": show_archived,
+        "archived_count": archived_count or 0,
+        "error": error,
+        "values": values or {},
+    }
 
 
 def accounts_context(db: Session, user: User, error: str | None = None, values: dict[str, object] | None = None) -> dict[str, object]:
@@ -544,8 +565,9 @@ def lists(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
+    show_archived: bool = False,
 ):
-    return render(request, "lists.html", lists_context(db, user))
+    return render(request, "lists.html", lists_context(db, user, show_archived=show_archived))
 
 
 @app.get("/history", response_class=HTMLResponse)
@@ -580,7 +602,58 @@ def create_list(
         db.add(Wishlist(user_id=user.id, name=required_text(name, "Wishlist name"), description=description.strip() or None))
         commit_or_400(db, "A wishlist with that name already exists.")
     except FormError as exc:
-        return render(request, "lists.html", lists_context(db, user, str(exc), {"name": name, "description": description}), status_code=400)
+        return render(
+            request,
+            "lists.html",
+            lists_context(db, user, error=str(exc), values={"name": name, "description": description}),
+            status_code=400,
+        )
+    return redirect("/lists")
+
+
+@app.post("/lists/{wishlist_id}")
+def update_list(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
+    wishlist_id: int,
+    name: Annotated[str, Form()],
+    description: Annotated[str, Form()] = "",
+):
+    wishlist = scoped_wishlist(db, user, wishlist_id)
+    try:
+        wishlist.name = required_text(name, "Wishlist name")
+        wishlist.description = description.strip() or None
+        commit_or_400(db, "A wishlist with that name already exists.")
+    except FormError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return redirect(f"/lists/{wishlist.id}")
+
+
+@app.post("/lists/{wishlist_id}/archive")
+def archive_list(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
+    wishlist_id: int,
+    archived: Annotated[str | None, Form()] = None,
+):
+    wishlist = scoped_wishlist(db, user, wishlist_id)
+    wishlist.archived = archived == "true"
+    db.commit()
+    return redirect("/lists?show_archived=true" if wishlist.archived else "/lists")
+
+
+@app.post("/lists/{wishlist_id}/delete")
+def delete_list(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
+    wishlist_id: int,
+):
+    wishlist = scoped_wishlist(db, user, wishlist_id)
+    db.delete(wishlist)
+    db.commit()
     return redirect("/lists")
 
 
@@ -714,6 +787,8 @@ def create_item(
     }
     try:
         wishlist = scoped_wishlist(db, user, wishlist_id)
+        if wishlist.archived:
+            raise FormError("Choose an active wishlist.")
         category = scoped_category(db, user, category_id)
         item = Item(
             user_id=user.id,
@@ -795,6 +870,8 @@ def update_item(
     }
     try:
         wishlist = scoped_wishlist(db, user, wishlist_id)
+        if wishlist.archived and wishlist.id != item.wishlist_id:
+            raise FormError("Choose an active wishlist.")
         item.title = required_text(title, "Item title")
         item.wishlist_id = wishlist.id
         category = scoped_category(db, user, category_id)

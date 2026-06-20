@@ -4,10 +4,35 @@
   <section class="hero">
     <span class="eyebrow">Wishlist</span>
     <div class="row wrap">
-      <h1>{{ wishlist.name }}</h1>
+      <div class="title-edit-row">
+        <h1>{{ wishlist.name }}</h1>
+        <button class="icon-button" type="button" data-list-edit-toggle aria-label="Rename list" title="Rename list">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4z"></path>
+            <path d="M13.5 6.5l4 4"></path>
+          </svg>
+        </button>
+      </div>
       <a class="button secondary" href="/items/new?wishlist_id={{ wishlist.id }}">Add</a>
     </div>
     {% if wishlist.description %}<p>{{ wishlist.description }}</p>{% endif %}
+    <form class="form inline-edit-form" method="post" action="/lists/{{ wishlist.id }}" data-list-edit-form hidden>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="grid two">
+        <div class="field">
+          <label>Name</label>
+          <input class="input" name="name" value="{{ wishlist.name }}" required>
+        </div>
+        <div class="field">
+          <label>Description</label>
+          <input class="input" name="description" value="{{ wishlist.description or '' }}">
+        </div>
+      </div>
+      <div class="row wrap">
+        <button class="button" type="submit">Save list</button>
+        <button class="button ghost" type="button" data-list-edit-cancel>Cancel</button>
+      </div>
+    </form>
   </section>
 
   <details class="filter-drawer">

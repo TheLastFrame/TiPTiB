@@ -14,6 +14,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   margin: 0;
   background:
@@ -154,6 +155,105 @@ textarea.input { min-height: 96px; resize: vertical; }
 }
 .button.secondary { background: #fff0bd; color: #62470a; }
 .button.ghost { background: transparent; color: var(--brand-strong); border: 1px solid var(--line); }
+.button.danger { background: #f5e4df; color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 36%, var(--line)); }
+.icon-button {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 250, 240, .86);
+  color: var(--brand-strong);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+}
+.icon-button:hover, .icon-button:focus-visible {
+  border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
+  background: var(--soft);
+  outline: none;
+}
+.icon-button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icon-button circle { fill: currentColor; stroke: none; }
+.title-edit-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.inline-edit-form {
+  margin-top: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 250, 240, .7);
+}
+.list-card {
+  position: relative;
+  overflow: hidden;
+}
+.list-card.is-archived {
+  border-style: dashed;
+  opacity: .78;
+}
+.list-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+.list-card-title {
+  min-width: 0;
+  border-radius: 8px;
+}
+.list-card-title:hover h2,
+.list-card-title:focus-visible h2 {
+  color: var(--brand-strong);
+}
+.list-card-title:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand) 45%, transparent);
+  outline-offset: 4px;
+}
+.list-card-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.list-card-main {
+  display: grid;
+  gap: 12px;
+  margin: -4px -16px -16px;
+  padding: 4px 16px 16px;
+  border-radius: 8px;
+}
+.list-actions-toggle {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  background: transparent;
+  box-shadow: none;
+}
+.list-actions {
+  display: none;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.list-card.actions-open .list-actions { display: grid; }
+.list-actions form,
+.list-actions button {
+  width: 100%;
+}
 .bottom-nav {
   position: fixed;
   left: 12px;

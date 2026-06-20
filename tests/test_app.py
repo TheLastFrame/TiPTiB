@@ -312,6 +312,113 @@ def test_users_cannot_see_each_others_items():
         assert response.status_code == 404
 
 
+def test_manage_lists_from_overview_and_detail():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        response = client.get("/lists/1")
+        assert response.status_code == 200
+        assert 'data-list-edit-toggle aria-label="Rename list"' in response.text
+
+        token = csrf_from(client, "/lists/1")
+        response = client.post(
+            "/lists/1",
+            data=with_csrf(token, {"name": "Home upgrades", "description": "Make the place nicer"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert response.headers["location"] == "/lists/1"
+        response = client.get("/lists")
+        assert "Home upgrades" in response.text
+        response = client.get("/lists/1")
+        assert "Make the place nicer" in response.text
+
+        token = csrf_from(client, "/lists")
+        response = client.post("/lists", data=with_csrf(token, {"name": "Travel"}), follow_redirects=False)
+        assert response.status_code == 303
+
+        token = csrf_from(client, "/lists/1")
+        response = client.post("/lists/1", data=with_csrf(token, {"name": "Travel"}), follow_redirects=False)
+        assert response.status_code == 400
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 2, "title": "Suitcase", "status": "planned", "price_avg": "100"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/savings",
+            data=with_csrf(token, {"amount": "25"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        token = csrf_from(client, "/lists")
+        response = client.post("/lists/2/archive", data=with_csrf(token, {"archived": "true"}), follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers["location"] == "/lists?show_archived=true"
+
+        response = client.get("/lists")
+        assert "Travel" not in response.text
+        response = client.get("/lists?show_archived=true")
+        assert "Travel" in response.text
+        assert "archived" in response.text
+
+        response = client.get("/items/new")
+        assert '<option value="2"' not in response.text
+        token = extract_csrf(response.text)
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 2, "title": "Archived item", "status": "planned", "price_avg": "10"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
+        assert "Choose an active wishlist." in response.text
+
+        token = csrf_from(client, "/lists?show_archived=true")
+        response = client.post("/lists/2/archive", data=with_csrf(token, {"archived": "false"}), follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers["location"] == "/lists"
+        response = client.get("/lists")
+        assert "Travel" in response.text
+
+        token = csrf_from(client, "/lists")
+        response = client.post("/lists/2/delete", data=with_csrf(token), follow_redirects=False)
+        assert response.status_code == 303
+        response = client.get("/lists")
+        assert "Travel" not in response.text
+        assert client.get(f"/items/{item_id}").status_code == 404
+        assert client.get("/lists/2").status_code == 404
+
+
+def test_users_cannot_manage_each_others_lists():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/users",
+            data=with_csrf(token, {"display_name": "Ada", "username": "ada", "password": "long-ada-password"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        logout(client)
+        login(client, username="ada", password="long-ada-password")
+
+        token = csrf_from(client, "/lists")
+        response = client.post("/lists/1", data=with_csrf(token, {"name": "Nope"}), follow_redirects=False)
+        assert response.status_code == 404
+        response = client.post("/lists/1/archive", data=with_csrf(token, {"archived": "true"}), follow_redirects=False)
+        assert response.status_code == 404
+        response = client.post("/lists/1/delete", data=with_csrf(token), follow_redirects=False)
+        assert response.status_code == 404
+
+
 def test_public_and_protected_route_boundaries():
     with TestClient(app) as client:
         response = client.get("/health")
@@ -345,6 +452,13 @@ def test_csrf_required_for_public_and_authenticated_posts():
         token = csrf_from(client, "/lists")
         response = client.post("/lists", data=with_csrf(token, {"name": "With token"}), follow_redirects=False)
         assert response.status_code == 303
+
+        response = client.post("/lists/1", data={"name": "No token"}, follow_redirects=False)
+        assert response.status_code == 403
+        response = client.post("/lists/1/archive", data={"archived": "true"}, follow_redirects=False)
+        assert response.status_code == 403
+        response = client.post("/lists/1/delete", follow_redirects=False)
+        assert response.status_code == 403
 
 
 def test_login_rate_limit_returns_429():
