@@ -158,6 +158,13 @@ p { color: var(--muted); margin: 0; line-height: 1.5; }
 .form { display: grid; gap: 12px; }
 .field { display: grid; gap: 6px; }
 .field label { color: var(--muted); font-size: .86rem; }
+.settings-history-panel {
+  align-content: start;
+}
+.settings-history-panel .button {
+  justify-self: center;
+  width: 100%;
+}
 .input {
   width: 100%;
   min-height: 44px;
