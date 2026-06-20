@@ -5,6 +5,7 @@ import tempfile
 os.environ["TIPTIB_DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/test.db"
 os.environ["TIPTIB_SECRET_KEY"] = "test-secret"
 os.environ["TIPTIB_SCHEDULER_ENABLED"] = "false"
+os.environ["TIPTIB_RUN_MIGRATIONS_ON_STARTUP"] = "false"
 
 from fastapi import FastAPI, Request  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -218,6 +219,50 @@ def test_setup_login_create_item_and_pwa_routes():
         details_response = client.get("/items/1?tab=details")
         assert details_response.status_code == 200
         assert "Save item" in details_response.text
+
+        token = csrf_from(client, "/items/2?tab=details")
+        response = client.post(
+            "/items/2",
+            data=with_csrf(
+                token,
+                {
+                    "title": "Dining table",
+                    "wishlist_id": 1,
+                    "rank": 2,
+                    "status": "bought",
+                    "price_min": "300",
+                    "price_avg": "450",
+                    "price_max": "700",
+                    "actual_price": "425",
+                },
+            ),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        response = client.get("/history")
+        assert response.status_code == 200
+        assert "Dining table" in response.text
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/preferences",
+            data=with_csrf(token, {"currency": "USD", "timezone_name": "UTC"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        response = client.get("/settings")
+        assert "USD" in response.text
+        assert "UTC" in response.text
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/password",
+            data=with_csrf(token, {"current_password": ADMIN_PASSWORD, "new_password": "new-long-password"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        logout(client)
+        login(client, password="new-long-password")
 
         assert client.get("/manifest.webmanifest").json()["short_name"] == "TiPTiB"
         assert client.get("/static/sw.js").status_code == 200

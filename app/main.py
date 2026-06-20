@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -7,11 +8,13 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from jinja2 import pass_context
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -23,10 +26,13 @@ from app.auth import (
     check_login_rate_limit,
     create_user,
     current_user,
+    hash_password,
     login_user,
     logout_user,
+    MIN_PASSWORD_LENGTH,
     record_login_result,
     users_exist,
+    verify_password,
 )
 from app.config import get_settings
 from app.database import SessionLocal, get_db, init_db
@@ -45,6 +51,7 @@ from app.models import (
 from app.scheduler import start_scheduler, stop_scheduler
 from app.services import (
     ACTIVE_STATUSES,
+    HISTORY_STATUSES,
     PLANNED_TOTAL_STATUSES,
     account_breakdown,
     add_savings_entry,
@@ -65,13 +72,20 @@ from app.security import (
 )
 
 settings = get_settings()
+logger = logging.getLogger("tiptib.startup")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+CURRENCY_RE = re.compile(r"^[A-Za-z]{3}$")
 
 
-def money_filter(value: object | None) -> str:
+@pass_context
+def money_filter(context, value: object | None) -> str:
+    currency = settings.default_currency
+    user = context.get("user")
+    if user is not None and getattr(user, "currency", None):
+        currency = user.currency
     amount = money(value)
-    return f"{amount:,.2f} {settings.default_currency}".replace(",", " ")
+    return f"{amount:,.2f} {currency}".replace(",", " ")
 
 
 templates.env.filters["money"] = money_filter
@@ -94,12 +108,15 @@ def render(request: Request, name: str, context: dict[str, object] | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     validate_security_settings(settings)
+    logger.info("Starting database initialization")
     init_db()
+    logger.info("Database initialization complete")
     db = SessionLocal()
     try:
         has_users = users_exist(db)
         validate_first_run_setup_allowed(settings, has_users)
         if settings.bootstrap_username and settings.bootstrap_password and not has_users:
+            logger.info("Creating bootstrap admin user")
             user = create_user(
                 db,
                 username=settings.bootstrap_username,
@@ -111,8 +128,15 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
     start_scheduler()
+    if settings.scheduler_enabled:
+        logger.info("Recurring savings scheduler started")
+    else:
+        logger.info("Recurring savings scheduler disabled")
+    logger.info("TiPTiB application startup complete")
     yield
+    logger.info("TiPTiB application shutdown starting")
     stop_scheduler()
+    logger.info("TiPTiB application shutdown complete")
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -197,6 +221,22 @@ def color_or_400(value: str) -> str:
     if not COLOR_RE.fullmatch(value.strip()):
         raise HTTPException(status_code=400, detail="Invalid color.")
     return value.strip()
+
+
+def currency_or_400(value: str) -> str:
+    cleaned = value.strip().upper()
+    if not CURRENCY_RE.fullmatch(cleaned):
+        raise HTTPException(status_code=400, detail="Currency must be a 3-letter code.")
+    return cleaned
+
+
+def timezone_or_400(value: str) -> str:
+    cleaned = value.strip()
+    try:
+        ZoneInfo(cleaned)
+    except ZoneInfoNotFoundError as exc:
+        raise HTTPException(status_code=400, detail="Unknown timezone.") from exc
+    return cleaned
 
 
 def required_text(value: str, field: str) -> str:
@@ -435,6 +475,21 @@ def lists(
             }
         )
     return render(request, "lists.html", common_context(db, user) | {"active": "lists", "rows": rows})
+
+
+@app.get("/history", response_class=HTMLResponse)
+def history(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(current_user)],
+):
+    items = db.scalars(
+        select(Item)
+        .options(selectinload(Item.wishlist), selectinload(Item.category))
+        .where(Item.user_id == user.id, Item.status.in_(HISTORY_STATUSES))
+        .order_by(Item.updated_at.desc())
+    ).all()
+    return render(request, "history.html", common_context(db, user) | {"active": "history", "history_items": items})
 
 
 @app.post("/lists")
@@ -802,6 +857,37 @@ def create_user_from_settings(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     ensure_defaults(db, new_user)
+    return redirect("/settings")
+
+
+@app.post("/settings/password")
+def change_password(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
+    current_password: Annotated[str, Form()],
+    new_password: Annotated[str, Form()],
+):
+    if not verify_password(current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    if len(new_password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
+    user.password_hash = hash_password(new_password)
+    db.commit()
+    return redirect("/settings")
+
+
+@app.post("/settings/preferences")
+def update_preferences(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
+    currency: Annotated[str, Form()],
+    timezone_name: Annotated[str, Form()],
+):
+    user.currency = currency_or_400(currency)
+    user.timezone = timezone_or_400(timezone_name)
+    db.commit()
     return redirect("/settings")
 
 

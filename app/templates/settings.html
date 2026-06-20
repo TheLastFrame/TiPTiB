@@ -2,12 +2,44 @@
 {% block title %}Settings · TiPTiB{% endblock %}
 {% block content %}
   <section class="hero">
-    <span class="eyebrow">Instance settings</span>
+    <span class="eyebrow">Account settings</span>
     <h1>Settings</h1>
-    <p>{{ settings.default_currency }} · {{ settings.default_timezone }}</p>
+    <p>{{ user.currency }} · {{ user.timezone }}</p>
   </section>
 
   <section class="grid two">
+    <article class="panel">
+      <form class="form" method="post" action="/settings/preferences">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <h2>Preferences</h2>
+        <div class="field">
+          <label>Currency</label>
+          <input class="input" name="currency" value="{{ user.currency }}" maxlength="3" required>
+        </div>
+        <div class="field">
+          <label>Timezone</label>
+          <input class="input" name="timezone_name" value="{{ user.timezone }}" required>
+        </div>
+        <button class="button secondary" type="submit">Save preferences</button>
+      </form>
+    </article>
+
+    <article class="panel">
+      <form class="form" method="post" action="/settings/password">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <h2>Password</h2>
+        <input class="input" name="current_password" type="password" placeholder="Current password" autocomplete="current-password" required>
+        <input class="input" name="new_password" type="password" placeholder="New password" autocomplete="new-password" required>
+        <button class="button secondary" type="submit">Change password</button>
+      </form>
+    </article>
+
+    <article class="panel stack">
+      <h2>History</h2>
+      <p>Review bought and skipped items.</p>
+      <a class="button ghost" href="/history">Open history</a>
+    </article>
+
     <article class="panel">
       <form class="form" method="post" action="/categories">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

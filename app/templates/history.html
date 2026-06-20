@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}History · TiPTiB{% endblock %}
+{% block content %}
+  <section class="hero">
+    <span class="eyebrow">Archive</span>
+    <h1>History</h1>
+    <p>Bought and skipped items stay here for later reference.</p>
+  </section>
+
+  <section class="grid two">
+    {% for item in history_items %}
+      <a class="card card-link" href="/items/{{ item.id }}" aria-label="Open {{ item.title }}">
+        <div class="row">
+          <div>
+            <span class="eyebrow">{{ item.wishlist.name }}{% if item.category %} · {{ item.category.name }}{% endif %}</span>
+            <h2>{{ item.title }}</h2>
+          </div>
+          <span class="pill status-{{ item.status.value }}">{{ item.status.value }}</span>
+        </div>
+        <div class="row wrap">
+          <span>{{ (item.actual_price or item.price_avg or item.price_max or item.price_min)|money }}</span>
+          {% if item.url %}<span class="chip">has link</span>{% endif %}
+        </div>
+      </a>
+    {% else %}
+      <article class="panel empty"><p>No history yet.</p></article>
+    {% endfor %}
+  </section>
+{% endblock %}

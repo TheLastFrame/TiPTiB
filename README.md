@@ -11,8 +11,11 @@ TiPTiB is a small self-hosted app for wishlists, buy plans, priority ranking, ma
 - Categories, price min/avg/max, actual price, notes, and links.
 - Manual virtual deposits and per-item recurring savings rules.
 - Named saving accounts such as Cash, ING Savings, or Envelope.
-- Mobile-first responsive UI with installable PWA shell.
+- Mobile-first responsive UI with custom CSS and an installable PWA shell.
+- Dedicated history view for bought and skipped items.
+- User preferences for currency/timezone and password changes from settings.
 - SQLite by default, PostgreSQL-ready through `TIPTIB_DATABASE_URL`.
+- Alembic migrations run on startup by default.
 
 ## Sorting Rules
 
@@ -54,6 +57,7 @@ Copy `.env.example` to `.env` or set environment variables:
 - `TIPTIB_ALLOW_WEB_SETUP` (`false` by default in production)
 - `TIPTIB_DEFAULT_CURRENCY`
 - `TIPTIB_DEFAULT_TIMEZONE`
+- `TIPTIB_RUN_MIGRATIONS_ON_STARTUP` (`true` by default)
 - `TIPTIB_BOOTSTRAP_USERNAME`
 - `TIPTIB_BOOTSTRAP_PASSWORD`
 
