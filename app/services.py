@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import re
@@ -29,6 +30,13 @@ HISTORY_STATUSES = (ItemStatus.bought, ItemStatus.skipped)
 
 
 MONEY_SPACE_RE = re.compile(r"[\s\u00a0\u202f]+")
+
+
+@dataclass(frozen=True)
+class GoalReachEstimate:
+    reached_at: datetime
+    deposit_count: int
+    remaining: Decimal
 
 
 def _currency_tokens(currency: str | None, locale: str | None) -> list[str]:
@@ -228,6 +236,38 @@ def advance_run_at(run_at: datetime, cadence: RecurrenceCadence) -> datetime:
         year += 1
     day = min(run_at.day, 28)
     return run_at.replace(year=year, month=month, day=day)
+
+
+def goal_reach_estimate(
+    *,
+    saved: Decimal,
+    target: Decimal,
+    rule: SavingsRule | None,
+    now: datetime | None = None,
+) -> GoalReachEstimate | None:
+    if target <= 0 or saved >= target or rule is None or not rule.active:
+        return None
+
+    deposit_amount = money(rule.amount)
+    if deposit_amount <= 0:
+        return None
+
+    remaining = money(target - saved)
+    run_at = as_utc(rule.next_run_at)
+    now = as_utc(now or datetime.now(timezone.utc))
+    while run_at <= now:
+        run_at = advance_run_at(run_at, rule.cadence)
+
+    deposit_count = 0
+    covered = Decimal("0.00")
+    reached_at = run_at
+    while covered < remaining:
+        deposit_count += 1
+        covered += deposit_amount
+        reached_at = run_at
+        run_at = advance_run_at(run_at, rule.cadence)
+
+    return GoalReachEstimate(reached_at=reached_at, deposit_count=deposit_count, remaining=remaining)
 
 
 def process_due_savings_rules(db: Session, now: datetime | None = None) -> int:

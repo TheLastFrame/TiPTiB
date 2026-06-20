@@ -6,7 +6,15 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models import Item, ItemStatus, RecurrenceCadence, SavingAccount, SavingsRule, User, Wishlist
-from app.services import account_breakdown, item_saved_total, item_target, item_unit_price, money, process_due_savings_rules
+from app.services import (
+    account_breakdown,
+    goal_reach_estimate,
+    item_saved_total,
+    item_target,
+    item_unit_price,
+    money,
+    process_due_savings_rules,
+)
 
 
 def session():
@@ -108,6 +116,81 @@ def test_item_target_multiplies_by_amount_and_defaults_to_one():
         actual_price=Decimal("12.00"),
     )
     assert item_target(actual_first_item) == Decimal("36.00")
+
+
+def test_goal_reach_estimate_projects_daily_weekly_and_monthly_rules():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    daily = goal_reach_estimate(
+        saved=Decimal("0.00"),
+        target=Decimal("30.00"),
+        rule=SavingsRule(
+            amount=Decimal("10.00"),
+            cadence=RecurrenceCadence.daily,
+            next_run_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            active=True,
+        ),
+        now=now,
+    )
+    weekly = goal_reach_estimate(
+        saved=Decimal("90.00"),
+        target=Decimal("100.00"),
+        rule=SavingsRule(
+            amount=Decimal("25.00"),
+            cadence=RecurrenceCadence.weekly,
+            next_run_at=datetime(2026, 1, 8, tzinfo=timezone.utc),
+            active=True,
+        ),
+        now=now,
+    )
+    monthly = goal_reach_estimate(
+        saved=Decimal("0.00"),
+        target=Decimal("50.00"),
+        rule=SavingsRule(
+            amount=Decimal("20.00"),
+            cadence=RecurrenceCadence.monthly,
+            next_run_at=datetime(2026, 1, 31, tzinfo=timezone.utc),
+            active=True,
+        ),
+        now=now,
+    )
+
+    assert daily is not None
+    assert daily.reached_at == datetime(2026, 1, 4, tzinfo=timezone.utc)
+    assert daily.deposit_count == 3
+    assert weekly is not None
+    assert weekly.reached_at == datetime(2026, 1, 8, tzinfo=timezone.utc)
+    assert weekly.deposit_count == 1
+    assert monthly is not None
+    assert monthly.reached_at == datetime(2026, 3, 28, tzinfo=timezone.utc)
+    assert monthly.deposit_count == 3
+
+
+def test_goal_reach_estimate_returns_none_without_projectable_rate():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    active_rule = SavingsRule(
+        amount=Decimal("10.00"),
+        cadence=RecurrenceCadence.weekly,
+        next_run_at=datetime(2026, 1, 8, tzinfo=timezone.utc),
+        active=True,
+    )
+    inactive_rule = SavingsRule(
+        amount=Decimal("10.00"),
+        cadence=RecurrenceCadence.weekly,
+        next_run_at=datetime(2026, 1, 8, tzinfo=timezone.utc),
+        active=False,
+    )
+    zero_rule = SavingsRule(
+        amount=Decimal("0.00"),
+        cadence=RecurrenceCadence.weekly,
+        next_run_at=datetime(2026, 1, 8, tzinfo=timezone.utc),
+        active=True,
+    )
+
+    assert goal_reach_estimate(saved=Decimal("0.00"), target=Decimal("100.00"), rule=None, now=now) is None
+    assert goal_reach_estimate(saved=Decimal("100.00"), target=Decimal("100.00"), rule=active_rule, now=now) is None
+    assert goal_reach_estimate(saved=Decimal("0.00"), target=Decimal("0.00"), rule=active_rule, now=now) is None
+    assert goal_reach_estimate(saved=Decimal("0.00"), target=Decimal("100.00"), rule=inactive_rule, now=now) is None
+    assert goal_reach_estimate(saved=Decimal("0.00"), target=Decimal("100.00"), rule=zero_rule, now=now) is None
 
 
 def test_money_accepts_plain_german_and_currency_formats():

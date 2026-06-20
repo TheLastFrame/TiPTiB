@@ -54,6 +54,9 @@
         <article class="panel stack">
           <div class="row wrap"><h2>Savings</h2><strong>{{ saved|money }} / {{ target|money }}</strong></div>
           <div class="progress"><span style="--value: {{ progress }}%"></span></div>
+          {% if goal_estimate %}
+            <p>Funded by {{ goal_estimate.reached_at|datetime_display }}</p>
+          {% endif %}
           <form class="form" method="post" action="/items/{{ item.id }}/savings">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             {% if error and error_form == "savings" %}<p class="error">{{ error }}</p>{% endif %}
@@ -181,6 +184,9 @@
             {% endif %}
             {% if item.status.value in ["saving", "ready"] %}
               <div class="card"><span class="eyebrow">Saved</span><strong>{{ saved|money }}</strong></div>
+            {% endif %}
+            {% if goal_estimate %}
+              <div class="card"><span class="eyebrow">Funded by</span><strong>{{ goal_estimate.reached_at|datetime_display }}</strong></div>
             {% endif %}
             <div class="card"><span class="eyebrow">Rank</span><strong>#{{ item.rank }}</strong></div>
             <div class="card"><span class="eyebrow">Category</span><strong>{{ item.category.name if item.category else "None" }}</strong></div>

@@ -391,7 +391,7 @@ def test_dashboard_upcoming_deposits_show_next_run():
         token = csrf_from(client, "/settings")
         response = client.post(
             "/settings/preferences",
-            data=with_csrf(token, {"currency": "EUR", "timezone_name": "Europe/Vienna"}),
+            data=with_csrf(token, {"currency": "EUR", "timezone_name": "UTC"}),
             follow_redirects=False,
         )
         assert response.status_code == 303
@@ -420,6 +420,14 @@ def test_dashboard_upcoming_deposits_show_next_run():
         assert response.status_code == 200
         assert "Coffee grinder" in response.text
         assert "next run: 2026-08-03 04:05" in response.text
+
+        response = client.get(f"/items/{item_id}")
+        assert response.status_code == 200
+        assert "Funded by</span><strong>2026-11-16 04:05</strong>" in response.text
+
+        response = client.get(f"/items/{item_id}?tab=budget")
+        assert response.status_code == 200
+        assert "Funded by 2026-11-16 04:05" in response.text
 
 
 def test_share_target_prefills_new_item_form():
