@@ -315,6 +315,113 @@ def test_setup_login_create_item_and_pwa_routes():
         assert "window.location.reload()" in app_js.text
 
 
+def test_recurring_rule_visibility_and_blank_next_run_preserves_schedule():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/preferences",
+            data=with_csrf(token, {"currency": "EUR", "timezone_name": "Europe/Vienna"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Savings camera", "status": "planned", "price_avg": "500"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/recurring-rule",
+            data=with_csrf(
+                token,
+                {"amount": "25", "cadence": "monthly", "account_id": 0, "next_run_at": "2026-01-01T00:00", "active": "on"},
+            ),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        response = client.get(f"/items/{item_id}?tab=budget")
+        assert response.status_code == 200
+        assert "Active" in response.text
+        assert "next run: 2026-01-01 00:00" in response.text
+        assert 'name="next_run_at" type="datetime-local" value="2026-01-01T00:00"' in response.text
+        assert re.search(r'<input type="checkbox" name="active" checked>', response.text)
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/recurring-rule",
+            data=with_csrf(token, {"amount": "25", "cadence": "monthly", "account_id": 0, "next_run_at": ""}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        response = client.get(f"/items/{item_id}?tab=budget")
+        assert response.status_code == 200
+        assert "Inactive" in response.text
+        assert "next run: 2026-01-01 00:00" in response.text
+        assert 'name="next_run_at" type="datetime-local" value="2026-01-01T00:00"' in response.text
+        assert not re.search(r'<input type="checkbox" name="active" checked>', response.text)
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/recurring-rule",
+            data=with_csrf(token, {"amount": "25", "cadence": "monthly", "account_id": 0, "next_run_at": "", "active": "on"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        response = client.get(f"/items/{item_id}?tab=budget")
+        assert response.status_code == 200
+        assert "Active" in response.text
+        assert "next run: 2026-01-01 00:00" in response.text
+        assert re.search(r'<input type="checkbox" name="active" checked>', response.text)
+
+
+def test_dashboard_upcoming_deposits_show_next_run():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/preferences",
+            data=with_csrf(token, {"currency": "EUR", "timezone_name": "Europe/Vienna"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Coffee grinder", "status": "planned", "price_avg": "160"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        token = csrf_from(client, f"/items/{item_id}?tab=budget")
+        response = client.post(
+            f"/items/{item_id}/recurring-rule",
+            data=with_csrf(
+                token,
+                {"amount": "10", "cadence": "weekly", "account_id": 0, "next_run_at": "2026-08-03T04:05", "active": "on"},
+            ),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        response = client.get("/dashboard")
+        assert response.status_code == 200
+        assert "Coffee grinder" in response.text
+        assert "next run: 2026-08-03 04:05" in response.text
+
+
 def test_share_target_prefills_new_item_form():
     with TestClient(app) as client:
         setup_admin(client)

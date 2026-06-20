@@ -59,7 +59,7 @@
           <div class="row">
             <div>
               <strong>{{ rule.item.title }}</strong>
-              <p>{{ rule.cadence.value }} · {{ rule.account.name if rule.account else "No account" }}</p>
+              <p>{{ rule.cadence.value }} &middot; {{ rule.account.name if rule.account else "No account" }} &middot; next run: {{ rule.next_run_at|datetime_display }}</p>
             </div>
             <span>{{ rule.amount|money }}</span>
           </div>

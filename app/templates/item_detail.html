@@ -74,6 +74,14 @@
 
         <article class="panel stack">
           <h2>Recurring deposit</h2>
+          {% if item.savings_rule %}
+            <p>
+              {{ "Active" if item.savings_rule.active else "Inactive" }}
+              &middot; next run: {{ item.savings_rule.next_run_at|datetime_display }}
+            </p>
+          {% else %}
+            <p>No recurring deposit configured</p>
+          {% endif %}
           <form class="form" method="post" action="/items/{{ item.id }}/recurring-rule">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             {% if error and error_form == "recurring" %}<p class="error">{{ error }}</p>{% endif %}
@@ -96,9 +104,9 @@
                   {% endfor %}
                 </select>
               </div>
-              <div class="field"><label>Next run</label><input class="input" name="next_run_at" type="datetime-local" value="{{ values.get('next_run_at', '') if error_form == 'recurring' else '' }}"></div>
+              <div class="field"><label>Next run</label><input class="input" name="next_run_at" type="datetime-local" value="{{ values.get('next_run_at', '') if error_form == 'recurring' else item.savings_rule.next_run_at|datetime_local if item.savings_rule else '' }}"></div>
             </div>
-            <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="active" {{ "checked" if (error_form == "recurring" and values.get('active') == "on") or error_form != "recurring" else "" }}> Active</label>
+            <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="active" {{ "checked" if (error_form == "recurring" and values.get('active') == "on") or (error_form != "recurring" and ((item.savings_rule and item.savings_rule.active) or not item.savings_rule)) else "" }}> Active</label>
             <button class="button secondary" type="submit">Save recurring rule</button>
           </form>
         </article>

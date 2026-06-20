@@ -111,7 +111,32 @@ def money_filter(context, value: object | None) -> str:
     return f"{amount:,.2f} {currency}".replace(",", " ")
 
 
+def user_datetime(value: datetime | None, user: User | None) -> datetime | None:
+    if value is None:
+        return None
+    run_at = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    timezone_name = getattr(user, "timezone", None) or settings.default_timezone
+    try:
+        return run_at.astimezone(ZoneInfo(timezone_name))
+    except ZoneInfoNotFoundError:
+        return run_at.astimezone(ZoneInfo(settings.default_timezone))
+
+
+@pass_context
+def datetime_local_value(context, value: datetime | None) -> str:
+    run_at = user_datetime(value, context.get("user"))
+    return run_at.strftime("%Y-%m-%dT%H:%M") if run_at else ""
+
+
+@pass_context
+def datetime_display(context, value: datetime | None) -> str:
+    run_at = user_datetime(value, context.get("user"))
+    return run_at.strftime("%Y-%m-%d %H:%M") if run_at else ""
+
+
 templates.env.filters["money"] = money_filter
+templates.env.filters["datetime_local"] = datetime_local_value
+templates.env.filters["datetime_display"] = datetime_display
 templates.env.globals["item_statuses"] = list(ItemStatus)
 templates.env.globals["cadences"] = list(RecurrenceCadence)
 templates.env.globals["settings"] = settings
@@ -242,14 +267,18 @@ def cadence_or_400(value: str) -> RecurrenceCadence:
         raise FormError("Invalid recurrence cadence.") from exc
 
 
-def parse_datetime_or_400(value: str) -> datetime:
+def parse_datetime_or_400(value: str, user: User | None = None) -> datetime:
     try:
         run_at = datetime.fromisoformat(value) if value else datetime.now(timezone.utc)
     except ValueError as exc:
         raise FormError("Invalid next run date.") from exc
     if run_at.tzinfo is None:
-        return run_at.replace(tzinfo=timezone.utc)
-    return run_at
+        timezone_name = getattr(user, "timezone", None) or settings.default_timezone
+        try:
+            run_at = run_at.replace(tzinfo=ZoneInfo(timezone_name))
+        except ZoneInfoNotFoundError:
+            run_at = run_at.replace(tzinfo=ZoneInfo(settings.default_timezone))
+    return run_at.astimezone(timezone.utc)
 
 
 def external_url_or_none(value: str) -> str | None:
@@ -1120,8 +1149,8 @@ def upsert_recurring_rule(
     values = {"amount": amount, "cadence": cadence, "account_id": account_id, "next_run_at": next_run_at, "active": active}
     try:
         account = scoped_account(db, user, account_id)
-        run_at = parse_datetime_or_400(next_run_at)
         rule = item.savings_rule or SavingsRule(user_id=user.id, item_id=item.id)
+        run_at = parse_datetime_or_400(next_run_at, user) if next_run_at.strip() or not item.savings_rule else item.savings_rule.next_run_at
         rule.amount = decimal_required(amount, user=user)
         rule.cadence = cadence_or_400(cadence)
         rule.account_id = account.id if account else None
