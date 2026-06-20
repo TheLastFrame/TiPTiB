@@ -104,6 +104,9 @@ def test_setup_login_create_item_and_pwa_routes():
             follow_redirects=False,
         )
         assert response.status_code == 303
+        created_item_url = response.headers["location"]
+        created_item = client.get(created_item_url)
+        assert 'data-back-button aria-label="Go back" data-back-url="/lists/1"' in created_item.text
         response = client.get("/dashboard")
         assert "999.00 EUR" not in response.text
         response = client.get("/lists")
@@ -183,6 +186,7 @@ def test_setup_login_create_item_and_pwa_routes():
         assert response.status_code == 200
         assert "Dining table" in response.text
         assert 'data-back-button aria-label="Go back"' in response.text
+        assert 'data-back-url="/lists"' in response.text
         assert 'href="/items/2"' in response.text
         assert '<details class="filter-drawer">' in response.text
         assert "shown</span>" not in response.text
@@ -223,6 +227,7 @@ def test_setup_login_create_item_and_pwa_routes():
         assert item_url.status_code == 200
         assert "Overview" in item_url.text
         assert 'data-back-button aria-label="Go back"' in item_url.text
+        assert 'data-back-url="/lists/1"' in item_url.text
         assert "Open budget" not in item_url.text
         assert "0% saved" not in item_url.text
         assert "Amount</span>" not in item_url.text
@@ -497,6 +502,7 @@ def test_manage_lists_from_overview_and_detail():
         assert "Home upgrades" in response.text
         response = client.get("/lists/1")
         assert "Make the place nicer" in response.text
+        assert 'data-back-url="/lists"' in response.text
 
         token = csrf_from(client, "/lists")
         response = client.post("/lists", data=with_csrf(token, {"name": "Travel"}), follow_redirects=False)
@@ -514,6 +520,8 @@ def test_manage_lists_from_overview_and_detail():
         )
         assert response.status_code == 303
         item_id = response.headers["location"].split("/")[-1]
+        item_response = client.get(f"/items/{item_id}")
+        assert 'data-back-url="/lists/2"' in item_response.text
 
         token = csrf_from(client, f"/items/{item_id}?tab=budget")
         response = client.post(

@@ -501,6 +501,7 @@ def item_detail_context(
         "unit_price": unit_price,
         "progress": progress_percent(saved, target),
         "show_back_button": True,
+        "back_url": f"/lists/{item.wishlist_id}",
         "error": error,
         "error_form": error_form,
         "values": values or {},
@@ -824,6 +825,7 @@ def list_detail(
             "filtered_saved_total": filtered_saved_total,
             "filtered_progress": progress_percent(filtered_saved_total, filtered_target_total),
             "show_back_button": True,
+            "back_url": "/lists",
         },
     )
 

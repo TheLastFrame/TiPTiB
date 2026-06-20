@@ -14,7 +14,7 @@
       <div class="page">
         {% if show_back_button %}
           <div class="top-actions row">
-            <button class="back-button" type="button" data-back-button aria-label="Go back">
+            <button class="back-button" type="button" data-back-button aria-label="Go back"{% if back_url %} data-back-url="{{ back_url }}"{% endif %}>
               <span aria-hidden="true">&larr;</span>
               <span>Back</span>
             </button>

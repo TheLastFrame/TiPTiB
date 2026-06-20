@@ -11,7 +11,9 @@ window.addEventListener("pageshow", (event) => {
 document.addEventListener("click", (event) => {
   const backButton = event.target.closest("[data-back-button]");
   if (backButton) {
-    if (window.history.length > 1 && document.referrer.startsWith(window.location.origin)) {
+    if (backButton.dataset.backUrl) {
+      window.location.assign(backButton.dataset.backUrl);
+    } else if (window.history.length > 1 && document.referrer.startsWith(window.location.origin)) {
       window.history.back();
     } else {
       window.location.assign("/dashboard");
