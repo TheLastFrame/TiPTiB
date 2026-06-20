@@ -32,6 +32,25 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const moveToggle = event.target.closest("[data-item-move-toggle]");
+  if (moveToggle) {
+    const form = document.querySelector("[data-item-move-form]");
+    if (form) {
+      form.hidden = false;
+      form.querySelector("select[name='wishlist_id']")?.focus();
+    }
+    return;
+  }
+
+  const moveCancel = event.target.closest("[data-item-move-cancel]");
+  if (moveCancel) {
+    const form = moveCancel.closest("[data-item-move-form]");
+    if (form) {
+      form.hidden = true;
+    }
+    return;
+  }
+
   const actionToggle = event.target.closest("[data-card-actions-toggle]");
   if (actionToggle) {
     const card = actionToggle.closest("[data-longpress-card]");
@@ -79,6 +98,10 @@ document.addEventListener("keydown", (event) => {
   const form = document.querySelector("[data-list-edit-form]:not([hidden])");
   if (form) {
     form.hidden = true;
+  }
+  const moveForm = document.querySelector("[data-item-move-form]:not([hidden])");
+  if (moveForm) {
+    moveForm.hidden = true;
   }
 });
 

@@ -369,6 +369,110 @@ def test_users_cannot_see_each_others_items():
         assert response.status_code == 404
 
 
+def test_item_can_move_to_another_active_list():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/lists")
+        response = client.post("/lists", data=with_csrf(token, {"name": "Travel"}), follow_redirects=False)
+        assert response.status_code == 303
+        response = client.post("/lists", data=with_csrf(token, {"name": "Office"}), follow_redirects=False)
+        assert response.status_code == 303
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Desk mat", "status": "planned", "price_avg": "20"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 2, "title": "Packing cubes", "status": "planned", "price_avg": "30"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        response = client.get(f"/items/{item_id}")
+        assert response.status_code == 200
+        assert 'data-item-move-toggle aria-label="Move item"' in response.text
+        assert 'data-item-move-form hidden' in response.text
+        assert '<option value="2" >Travel</option>' in response.text
+        assert '<option value="3" >Office</option>' in response.text
+        assert '<option value="1"' not in response.text
+
+        token = extract_csrf(response.text)
+        response = client.post(f"/items/{item_id}/move", data=with_csrf(token, {"wishlist_id": 2}), follow_redirects=False)
+
+        assert response.status_code == 303
+        assert response.headers["location"] == "/lists/2"
+        old_list = client.get("/lists/1")
+        new_list = client.get("/lists/2")
+        assert "Desk mat" not in old_list.text
+        assert "Desk mat" in new_list.text
+        assert "Packing cubes" in new_list.text
+        moved_item = client.get(f"/items/{item_id}")
+        assert "Travel" in moved_item.text
+        assert "Rank</span><strong>#2</strong>" in moved_item.text
+
+
+def test_item_move_rejects_archived_same_and_inaccessible_lists():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/lists")
+        response = client.post("/lists", data=with_csrf(token, {"name": "Travel"}), follow_redirects=False)
+        assert response.status_code == 303
+        response = client.post("/lists", data=with_csrf(token, {"name": "Archive me"}), follow_redirects=False)
+        assert response.status_code == 303
+
+        token = csrf_from(client, "/lists")
+        response = client.post("/lists/3/archive", data=with_csrf(token, {"archived": "true"}), follow_redirects=False)
+        assert response.status_code == 303
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Lamp", "status": "planned", "price_avg": "40"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        response = client.get(f"/items/{item_id}")
+        assert '<option value="2" >Travel</option>' in response.text
+        assert '<option value="3"' not in response.text
+        token = extract_csrf(response.text)
+
+        response = client.post(f"/items/{item_id}/move", data=with_csrf(token, {"wishlist_id": 3}), follow_redirects=False)
+        assert response.status_code == 400
+        assert "Choose an active wishlist." in response.text
+        assert 'data-item-move-form ' in response.text
+        assert 'data-item-move-form hidden' not in response.text
+
+        response = client.post(f"/items/{item_id}/move", data=with_csrf(token, {"wishlist_id": 1}), follow_redirects=False)
+        assert response.status_code == 400
+        assert "Choose a different wishlist." in response.text
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/users",
+            data=with_csrf(token, {"display_name": "Ada", "username": "ada", "password": "long-ada-password"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        response = client.post(f"/items/{item_id}/move", data=with_csrf(token, {"wishlist_id": 4}), follow_redirects=False)
+        assert response.status_code == 400
+        assert "Choose an active wishlist." in response.text
+
+        logout(client)
+        login(client, username="ada", password="long-ada-password")
+        token = csrf_from(client, "/lists")
+        response = client.post(f"/items/{item_id}/move", data=with_csrf(token, {"wishlist_id": 4}), follow_redirects=False)
+        assert response.status_code == 404
+
+
 def test_manage_lists_from_overview_and_detail():
     with TestClient(app) as client:
         setup_admin(client)
@@ -515,6 +619,8 @@ def test_csrf_required_for_public_and_authenticated_posts():
         response = client.post("/lists/1/archive", data={"archived": "true"}, follow_redirects=False)
         assert response.status_code == 403
         response = client.post("/lists/1/delete", follow_redirects=False)
+        assert response.status_code == 403
+        response = client.post("/items/1/move", data={"wishlist_id": 1}, follow_redirects=False)
         assert response.status_code == 403
 
 

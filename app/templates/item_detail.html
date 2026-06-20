@@ -1,4 +1,13 @@
 {% extends "base.html" %}
+{% block top_actions %}
+  <button class="icon-button" type="button" data-item-move-toggle aria-label="Move item" title="Move item">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 12h14"></path>
+      <path d="M13 6l6 6-6 6"></path>
+      <path d="M5 5v14"></path>
+    </svg>
+  </button>
+{% endblock %}
 {% block title %}{{ item.title }} · TiPTiB{% endblock %}
 {% block content %}
   <section class="hero">
@@ -7,6 +16,30 @@
       <h1>{{ item.title }}</h1>
       <span class="pill status-{{ item.status.value }}">{{ item.status.value }}</span>
     </div>
+    <form class="form inline-edit-form" method="post" action="/items/{{ item.id }}/move" data-item-move-form {{ "" if error_form == "move" else "hidden" }}>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h2>Move item</h2>
+      {% if error and error_form == "move" %}<p class="error">{{ error }}</p>{% endif %}
+      {% if move_wishlists %}
+        <div class="field">
+          <label>Destination list</label>
+          <select class="input" name="wishlist_id" required>
+            {% for wishlist in move_wishlists %}
+              <option value="{{ wishlist.id }}" {{ "selected" if error_form == "move" and (values.get('wishlist_id', 0)|int) == wishlist.id else "" }}>{{ wishlist.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="row wrap">
+          <button class="button" type="submit">Move</button>
+          <button class="button ghost" type="button" data-item-move-cancel>Cancel</button>
+        </div>
+      {% else %}
+        <p>No other active lists yet.</p>
+        <div class="row wrap">
+          <button class="button ghost" type="button" data-item-move-cancel>Close</button>
+        </div>
+      {% endif %}
+    </form>
   </section>
 
   <nav class="tabs" aria-label="Item sections">

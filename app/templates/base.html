@@ -13,10 +13,15 @@
     <main class="shell">
       <div class="page">
         {% if show_back_button %}
-          <button class="back-button" type="button" data-back-button aria-label="Go back">
-            <span aria-hidden="true">&larr;</span>
-            <span>Back</span>
-          </button>
+          <div class="top-actions row">
+            <button class="back-button" type="button" data-back-button aria-label="Go back">
+              <span aria-hidden="true">&larr;</span>
+              <span>Back</span>
+            </button>
+            <div class="top-actions-right">
+              {% block top_actions %}{% endblock %}
+            </div>
+          </div>
         {% endif %}
         {% block content %}{% endblock %}
       </div>

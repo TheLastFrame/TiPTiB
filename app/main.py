@@ -486,9 +486,15 @@ def item_detail_context(
     saved = item_saved_total(db, item.id)
     target = item_target(item)
     unit_price = item_unit_price(item)
+    move_wishlists = db.scalars(
+        select(Wishlist)
+        .where(Wishlist.user_id == user.id, Wishlist.archived.is_(False), Wishlist.id != item.wishlist_id)
+        .order_by(Wishlist.name)
+    ).all()
     return common_context(db, user) | {
         "active": "lists",
         "item": item,
+        "move_wishlists": move_wishlists,
         "selected_tab": selected_tab,
         "saved": saved,
         "target": target,
@@ -970,6 +976,41 @@ def update_item(
     except FormError as exc:
         return render(request, "item_detail.html", item_detail_context(db, user, item, "details", str(exc), "details", values), status_code=400)
     return redirect(f"/items/{item.id}")
+
+
+@app.post("/items/{item_id}/move")
+def move_item(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
+    item_id: int,
+    wishlist_id: Annotated[int, Form()] = 0,
+):
+    item = scoped_item(db, user, item_id)
+    try:
+        wishlist = db.scalar(
+            select(Wishlist).where(
+                Wishlist.id == wishlist_id,
+                Wishlist.user_id == user.id,
+                Wishlist.archived.is_(False),
+            )
+        )
+        if not wishlist:
+            raise FormError("Choose an active wishlist.")
+        if wishlist.id == item.wishlist_id:
+            raise FormError("Choose a different wishlist.")
+        item.wishlist_id = wishlist.id
+        item.rank = next_rank(db, user.id, wishlist.id)
+        db.commit()
+    except FormError as exc:
+        return render(
+            request,
+            "item_detail.html",
+            item_detail_context(db, user, item, "overview", str(exc), "move", {"wishlist_id": wishlist_id}),
+            status_code=400,
+        )
+    return redirect(f"/lists/{wishlist.id}")
 
 
 @app.post("/items/{item_id}/savings")
