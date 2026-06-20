@@ -135,32 +135,7 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <h2>Item details</h2>
         {% if error and error_form == "details" %}<p class="error">{{ error }}</p>{% endif %}
-        <input type="hidden" name="wishlist_id" value="{{ values.get('wishlist_id', item.wishlist_id) if error_form == 'details' else item.wishlist_id }}">
-        <div class="grid two">
-          <div class="field"><label>Title</label><input class="input" name="title" value="{{ values.get('title', item.title) if error_form == 'details' else item.title }}" required></div>
-          <div class="field"><label>Rank</label><input class="input" name="rank" type="number" value="{{ values.get('rank', item.rank) if error_form == 'details' else item.rank }}"></div>
-          <div class="field">
-            <label>Status</label>
-            <select class="input" name="status">
-              {% for status in item_statuses %}<option value="{{ status.value }}" {{ "selected" if (error_form == "details" and values.get('status') == status.value) or (error_form != "details" and item.status == status) else "" }}>{{ status.value }}</option>{% endfor %}
-            </select>
-          </div>
-          <div class="field">
-            <label>Category</label>
-            <select class="input" name="category_id">
-              <option value="0">No category</option>
-              {% for category in categories %}<option value="{{ category.id }}" {{ "selected" if (error_form == "details" and (values.get('category_id', 0)|int) == category.id) or (error_form != "details" and item.category_id == category.id) else "" }}>{{ category.name }}</option>{% endfor %}
-            </select>
-          </div>
-          <div class="field"><label>Min</label><input class="input" name="price_min" value="{{ values.get('price_min', item.price_min or '') if error_form == 'details' else item.price_min or '' }}"></div>
-          <div class="field"><label>Avg</label><input class="input" name="price_avg" value="{{ values.get('price_avg', item.price_avg or '') if error_form == 'details' else item.price_avg or '' }}"></div>
-          <div class="field"><label>Max</label><input class="input" name="price_max" value="{{ values.get('price_max', item.price_max or '') if error_form == 'details' else item.price_max or '' }}"></div>
-          <div class="field"><label>Actual</label><input class="input" name="actual_price" value="{{ values.get('actual_price', item.actual_price or '') if error_form == 'details' else item.actual_price or '' }}"></div>
-          <div class="field"><label>Amount</label><input class="input" name="amount" type="number" min="1" step="1" value="{{ values.get('amount', item.amount) if error_form == 'details' else item.amount }}"></div>
-        </div>
-        <div class="field"><label>Reason</label><textarea class="input" name="reason">{{ values.get('reason', item.reason or '') if error_form == 'details' else item.reason or '' }}</textarea></div>
-        <div class="field"><label>Link</label><input class="input" name="url" value="{{ values.get('url', item.url or '') if error_form == 'details' else item.url or '' }}"></div>
-        <div class="field"><label>Notes</label><textarea class="input" name="notes">{{ values.get('notes', item.notes or '') if error_form == 'details' else item.notes or '' }}</textarea></div>
+        {% include "partials/item_fields.html" %}
         <button class="button" type="submit">Save item</button>
       </form>
     </section>

@@ -91,6 +91,7 @@ def test_setup_login_create_item_and_pwa_routes():
         response = client.get("/items/new")
         assert response.status_code == 200
         assert "data-back-button" not in response.text
+        assert 'name="rank"' in response.text
 
         response = client.get("/lists")
         assert response.status_code == 200
@@ -107,6 +108,7 @@ def test_setup_login_create_item_and_pwa_routes():
         created_item_url = response.headers["location"]
         created_item = client.get(created_item_url)
         assert 'data-back-button aria-label="Go back" data-back-url="/lists/1"' in created_item.text
+        assert "#1" in created_item.text
         response = client.get("/dashboard")
         assert "999.00 EUR" not in response.text
         response = client.get("/lists")
@@ -124,6 +126,7 @@ def test_setup_login_create_item_and_pwa_routes():
                     "price_avg": "450",
                     "price_max": "700",
                     "amount": "2",
+                    "rank": "7",
                     "reason": "Big enough for dinner with friends",
                 },
             ),
@@ -131,6 +134,8 @@ def test_setup_login_create_item_and_pwa_routes():
         )
         assert response.status_code == 303
         assert response.headers["location"].startswith("/items/")
+        ranked_item = client.get(response.headers["location"])
+        assert "#7" in ranked_item.text
 
         response = client.post(
             "/items",
@@ -1023,6 +1028,15 @@ def test_bad_inputs_are_controlled_responses():
         )
         assert response.status_code == 400
         assert "Links must use http or https." in response.text
+
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Bad rank", "status": "planned", "rank": "nope"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
+        assert "Rank must be a whole number." in response.text
+        assert 'value="nope"' in response.text
 
         for bad_amount in ("nope", "1.5", "0", "-1"):
             response = client.post(

@@ -1,0 +1,57 @@
+{% set is_detail_form = item is defined and item %}
+{% set use_values = (not is_detail_form) or error_form == "details" %}
+{% set title_value = values.get('title', item.title if is_detail_form else '') if use_values else item.title %}
+{% set wishlist_value = values.get('wishlist_id', item.wishlist_id if is_detail_form else wishlist_id) if use_values else item.wishlist_id %}
+{% set category_value = values.get('category_id', item.category_id or 0 if is_detail_form else 0) if use_values else item.category_id or 0 %}
+{% set status_value = values.get('status', item.status.value if is_detail_form else 'idea') if use_values else item.status.value %}
+{% set rank_value = values.get('rank', item.rank if is_detail_form else '') if use_values else item.rank %}
+{% set amount_value = values.get('amount', item.amount if is_detail_form else '') if use_values else item.amount %}
+{% set price_min_value = values.get('price_min', item.price_min or '' if is_detail_form else '') if use_values else item.price_min or '' %}
+{% set price_avg_value = values.get('price_avg', item.price_avg or '' if is_detail_form else '') if use_values else item.price_avg or '' %}
+{% set price_max_value = values.get('price_max', item.price_max or '' if is_detail_form else '') if use_values else item.price_max or '' %}
+{% set actual_price_value = values.get('actual_price', item.actual_price or '' if is_detail_form else '') if use_values else item.actual_price or '' %}
+{% set reason_value = values.get('reason', item.reason or '' if is_detail_form else '') if use_values else item.reason or '' %}
+{% set url_value = values.get('url', item.url or '' if is_detail_form else '') if use_values else item.url or '' %}
+{% set notes_value = values.get('notes', item.notes or '' if is_detail_form else '') if use_values else item.notes or '' %}
+
+{% if is_detail_form %}
+  <input type="hidden" name="wishlist_id" value="{{ wishlist_value }}">
+{% else %}
+  <div class="field">
+    <label>Wishlist</label>
+    <select class="input" name="wishlist_id" required>
+      {% for wishlist in wishlists %}
+        <option value="{{ wishlist.id }}" {{ "selected" if (wishlist_value|int) == wishlist.id else "" }}>{{ wishlist.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+{% endif %}
+<div class="grid two">
+  {% if is_detail_form %}
+    <div class="field"><label>Title</label><input class="input" name="title" value="{{ title_value }}" required></div>
+  {% else %}
+    <div class="field"><label>Title</label><input class="input" name="title" required placeholder="Dining table" value="{{ title_value }}"></div>
+  {% endif %}
+  <div class="field"><label>Rank</label><input class="input" name="rank" type="number" step="1" value="{{ rank_value }}"></div>
+  <div class="field">
+    <label>Status</label>
+    <select class="input" name="status">
+      {% for status in item_statuses %}<option value="{{ status.value }}" {{ "selected" if status_value == status.value else "" }}>{{ status.value }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label>Category</label>
+    <select class="input" name="category_id">
+      <option value="0">No category</option>
+      {% for category in categories %}<option value="{{ category.id }}" {{ "selected" if (category_value|int) == category.id else "" }}>{{ category.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field"><label>Min</label><input class="input" name="price_min" inputmode="decimal" value="{{ price_min_value }}"></div>
+  <div class="field"><label>Avg</label><input class="input" name="price_avg" inputmode="decimal" value="{{ price_avg_value }}"></div>
+  <div class="field"><label>Max</label><input class="input" name="price_max" inputmode="decimal" value="{{ price_max_value }}"></div>
+  <div class="field"><label>Actual</label><input class="input" name="actual_price" inputmode="decimal" value="{{ actual_price_value }}"></div>
+  <div class="field"><label>Amount</label><input class="input" name="amount" type="number" min="1" step="1" value="{{ amount_value }}"></div>
+</div>
+<div class="field"><label>Reason</label><textarea class="input" name="reason">{{ reason_value }}</textarea></div>
+<div class="field"><label>Link</label><input class="input" name="url" type="url" value="{{ url_value }}"></div>
+<div class="field"><label>Notes</label><textarea class="input" name="notes">{{ notes_value }}</textarea></div>

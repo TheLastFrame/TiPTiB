@@ -254,6 +254,15 @@ def item_amount_or_default(value: str | None) -> int:
     return amount
 
 
+def item_rank_or_default(value: str | None, default: int) -> int:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        return default
+    if not cleaned.isdecimal():
+        raise FormError("Rank must be a whole number.")
+    return int(cleaned)
+
+
 def item_status_or_400(value: str) -> ItemStatus:
     try:
         return ItemStatus(value)
@@ -931,6 +940,7 @@ def create_item(
     price_max: Annotated[str, Form()] = "",
     actual_price: Annotated[str, Form()] = "",
     amount: Annotated[str, Form()] = "",
+    rank: Annotated[str, Form()] = "",
     reason: Annotated[str, Form()] = "",
     url: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
@@ -945,6 +955,7 @@ def create_item(
         "price_max": price_max,
         "actual_price": actual_price,
         "amount": amount,
+        "rank": rank,
         "reason": reason,
         "url": url,
         "notes": notes,
@@ -964,7 +975,7 @@ def create_item(
             reason=reason.strip() or None,
             status=item_status_or_400(status),
             amount=item_amount_or_default(amount),
-            rank=next_rank(db, user.id, wishlist.id),
+            rank=item_rank_or_default(rank, next_rank(db, user.id, wishlist.id)),
             price_min=decimal_or_none(price_min, user),
             price_avg=decimal_or_none(price_avg, user),
             price_max=decimal_or_none(price_max, user),
