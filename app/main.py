@@ -923,6 +923,8 @@ def create_item(
         if wishlist.archived:
             raise FormError("Choose an active wishlist.")
         category = scoped_category(db, user, category_id)
+        if category and category.archived:
+            raise FormError("Choose an active category.")
         item = Item(
             user_id=user.id,
             wishlist_id=wishlist.id,
@@ -1019,6 +1021,8 @@ def update_item(
         item.reason = reason.strip() or None
         item.wishlist_id = wishlist.id
         category = scoped_category(db, user, category_id)
+        if category and category.archived and category.id != item.category_id:
+            raise FormError("Choose an active category.")
         item.category_id = category.id if category else None
         item.status = item_status_or_400(status)
         item.amount = item_amount_or_default(amount)
@@ -1148,6 +1152,40 @@ def create_category(
             request,
             "settings.html",
             settings_context(db, user, {"categories": str(exc)}, {"categories": {"name": name, "color": color}}),
+            status_code=400,
+        )
+    return redirect("/settings")
+
+
+@app.post("/categories/{category_id}")
+def update_category(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(current_user)],
+    csrf: Annotated[None, Depends(validate_csrf)],
+    category_id: int,
+    name: Annotated[str, Form()],
+    color: Annotated[str, Form()] = "#8b8f78",
+    archived: Annotated[str | None, Form()] = None,
+):
+    category = db.get(Category, category_id)
+    if not category or category.user_id != user.id:
+        raise HTTPException(status_code=404)
+    try:
+        category.name = required_text(name, "Category name")
+        category.color = color_or_400(color)
+        category.archived = bool(archived)
+        commit_or_400(db, "A category with that name already exists.")
+    except FormError as exc:
+        return render(
+            request,
+            "settings.html",
+            settings_context(
+                db,
+                user,
+                {"categories": str(exc)},
+                {"categories": {"category_id": category_id, "name": name, "color": color}},
+            ),
             status_code=400,
         )
     return redirect("/settings")

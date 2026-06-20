@@ -441,6 +441,108 @@ def test_users_cannot_see_each_others_items():
         assert response.status_code == 404
 
 
+def test_categories_can_be_renamed_recolored_and_archived():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/categories",
+            data=with_csrf(token, {"name": "Furniture", "color": "#8b8f78"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(
+                token,
+                {"wishlist_id": 1, "title": "Dining chair", "category_id": 1, "status": "planned", "price_avg": "120"},
+            ),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        item_id = response.headers["location"].split("/")[-1]
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/categories/1",
+            data=with_csrf(token, {"name": "Seating", "color": "#123456"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        response = client.get("/settings")
+        assert "Seating" in response.text
+        assert "#123456" in response.text
+        item_response = client.get(f"/items/{item_id}")
+        assert item_response.status_code == 200
+        assert "Seating" in item_response.text
+        assert "Furniture" not in item_response.text
+
+        token = extract_csrf(response.text)
+        response = client.post(
+            "/categories/1",
+            data=with_csrf(token, {"name": "Seating", "color": "#123456", "archived": "on"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        response = client.get("/settings")
+        assert "Seating" not in response.text
+        response = client.get("/items/new")
+        assert '<option value="1">Seating</option>' not in response.text
+        token = extract_csrf(response.text)
+        response = client.post(
+            "/items",
+            data=with_csrf(
+                token,
+                {"wishlist_id": 1, "title": "Archived category item", "category_id": 1, "status": "planned", "price_avg": "10"},
+            ),
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
+        assert "Choose an active category." in response.text
+        item_response = client.get(f"/items/{item_id}")
+        assert "Seating" in item_response.text
+
+
+def test_category_update_validation_and_ownership():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/settings")
+        assert client.post("/categories", data=with_csrf(token, {"name": "Furniture", "color": "#8b8f78"})).status_code == 200
+        token = csrf_from(client, "/settings")
+        response = client.post("/categories", data=with_csrf(token, {"name": "Decor", "color": "#f6c344"}), follow_redirects=False)
+        assert response.status_code == 303
+
+        token = csrf_from(client, "/settings")
+        response = client.post("/categories/1", data=with_csrf(token, {"name": "Furniture", "color": "red"}), follow_redirects=False)
+        assert response.status_code == 400
+        assert "Invalid color." in response.text
+
+        token = csrf_from(client, "/settings")
+        response = client.post("/categories/1", data=with_csrf(token, {"name": "Decor", "color": "#8b8f78"}), follow_redirects=False)
+        assert response.status_code == 400
+        assert "A category with that name already exists." in response.text
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/users",
+            data=with_csrf(token, {"display_name": "Ada", "username": "ada", "password": "long-ada-password"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        logout(client)
+        login(client, username="ada", password="long-ada-password")
+
+        token = csrf_from(client, "/settings")
+        response = client.post("/categories/1", data=with_csrf(token, {"name": "Nope", "color": "#8b8f78"}), follow_redirects=False)
+        assert response.status_code == 404
+
+
 def test_item_can_move_to_another_active_list():
     with TestClient(app) as client:
         setup_admin(client)

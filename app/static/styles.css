@@ -208,6 +208,61 @@ textarea.input { min-height: 96px; resize: vertical; }
   border-radius: 8px;
   background: rgba(255, 250, 240, .7);
 }
+.category-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.category-chip-row {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+.category-chip-button {
+  border: 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+.category-chip-button:hover,
+.category-chip-button:focus-visible {
+  background: color-mix(in srgb, var(--soft) 72%, white);
+  outline: 2px solid color-mix(in srgb, var(--brand) 34%, transparent);
+  outline-offset: 2px;
+}
+.category-chip-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: .78;
+}
+.modal {
+  width: min(420px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 96%, white);
+  color: var(--ink);
+  box-shadow: 0 24px 70px rgba(10, 79, 73, .24);
+}
+.modal::backdrop {
+  background: rgba(19, 33, 31, .32);
+  backdrop-filter: blur(3px);
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.modal-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
 .list-card {
   position: relative;
   overflow: hidden;

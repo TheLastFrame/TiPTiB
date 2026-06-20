@@ -51,18 +51,62 @@
       <a class="button ghost" href="/history">Open history</a>
     </article>
 
-    <article class="panel">
+    <article class="panel stack">
+      <h2>Categories</h2>
+      {% if errors.get("categories") %}<p class="error">{{ errors.get("categories") }}</p>{% endif %}
+      {% if categories %}
+        <div class="category-list">
+          {% for category in categories %}
+            {% set category_values = values.get('categories', {}) if values.get('categories', {}).get('category_id') == category.id else {} %}
+            {% set dialog_id = "category-dialog-" ~ category.id %}
+            <div class="category-chip-row">
+              <button class="chip category-chip-button" type="button" data-category-dialog-open="{{ dialog_id }}" aria-label="Edit {{ category.name }}" style="border-left: 4px solid {{ category.color }}">
+                <span>{{ category.name }}</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 20h9"></path>
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                </svg>
+              </button>
+            </div>
+            <dialog class="modal" id="{{ dialog_id }}" {{ "open" if category_values }}>
+              <form class="form" method="post" action="/categories/{{ category.id }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="modal-head">
+                  <h3>Edit category</h3>
+                  <button class="icon-button" type="button" data-dialog-close aria-label="Close">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M18 6 6 18"></path>
+                      <path d="m6 6 12 12"></path>
+                    </svg>
+                  </button>
+                </div>
+                <span class="chip" style="border-left: 4px solid {{ category_values.get('color', category.color) }}">{{ category.name }}</span>
+                <div class="field">
+                  <label>Name</label>
+                  <input class="input" name="name" value="{{ category_values.get('name', category.name) }}" required>
+                </div>
+                <div class="field">
+                  <label>Color</label>
+                  <input class="input" name="color" type="color" value="{{ category_values.get('color', category.color) }}">
+                </div>
+                <div class="modal-actions">
+                  <button class="button danger" type="submit" name="archived" value="on" data-confirm="Delete this category? Existing items will keep it, but it will be hidden from future choices.">Delete category</button>
+                  <button class="button secondary" type="submit">Save category</button>
+                </div>
+              </form>
+            </dialog>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p>No categories yet.</p>
+      {% endif %}
+
       <form class="form" method="post" action="/categories">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <h2>Categories</h2>
-        {% if errors.get("categories") %}<p class="error">{{ errors.get("categories") }}</p>{% endif %}
-        {% for category in categories %}
-          <div class="row"><span class="chip" style="border-left: 4px solid {{ category.color }}">{{ category.name }}</span></div>
-        {% else %}
-          <p>No categories yet.</p>
-        {% endfor %}
-        <input class="input" name="name" placeholder="Furniture" value="{{ values.get('categories', {}).get('name', '') }}" required>
-        <input class="input" name="color" type="color" value="{{ values.get('categories', {}).get('color', '#8b8f78') }}">
+        <h3>Add category</h3>
+        {% set new_category_values = values.get('categories', {}) if not values.get('categories', {}).get('category_id') else {} %}
+        <input class="input" name="name" placeholder="Furniture" value="{{ new_category_values.get('name', '') }}" required>
+        <input class="input" name="color" type="color" value="{{ new_category_values.get('color', '#8b8f78') }}">
         <button class="button secondary" type="submit">Add category</button>
       </form>
     </article>

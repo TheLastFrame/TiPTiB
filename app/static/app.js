@@ -59,6 +59,31 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const categoryDialogOpen = event.target.closest("[data-category-dialog-open]");
+  if (categoryDialogOpen) {
+    const dialog = document.getElementById(categoryDialogOpen.dataset.categoryDialogOpen);
+    if (dialog) {
+      if (dialog.showModal) {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute("open", "");
+      }
+      dialog.querySelector("input[name='name']")?.focus();
+    }
+    return;
+  }
+
+  const dialogClose = event.target.closest("[data-dialog-close]");
+  if (dialogClose) {
+    dialogClose.closest("dialog")?.close();
+    return;
+  }
+
+  if (event.target instanceof HTMLDialogElement) {
+    event.target.close();
+    return;
+  }
+
   const actionToggle = event.target.closest("[data-card-actions-toggle]");
   if (actionToggle) {
     const card = actionToggle.closest("[data-longpress-card]");
@@ -92,8 +117,10 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("submit", (event) => {
+  const submitter = event.submitter?.closest("[data-confirm]");
   const form = event.target.closest("[data-confirm]");
-  if (form && !window.confirm(form.dataset.confirm)) {
+  const confirmation = submitter?.dataset.confirm || form?.dataset.confirm;
+  if (confirmation && !window.confirm(confirmation)) {
     event.preventDefault();
   }
 });
