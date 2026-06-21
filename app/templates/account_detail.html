@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ account.name }} &middot; TiPTiB{% endblock %}
+{% block content %}
+  <section class="hero">
+    <span class="eyebrow">Saving account</span>
+    <div class="row wrap">
+      <h1>{{ account.name }}</h1>
+      <strong>{{ total|money }}</strong>
+    </div>
+    <div class="row wrap" style="justify-content:flex-start;">
+      <span class="chip">{{ "Default account" if account.is_default else "Additional account" }}</span>
+      {% if account.archived %}<span class="chip">Archived</span>{% endif %}
+    </div>
+  </section>
+
+  <section class="panel stack">
+    <div class="row wrap">
+      <h2>Saved by item</h2>
+      <span class="pill">{{ item_rows|length }} items</span>
+    </div>
+    <div class="tableish">
+      {% for row in item_rows %}
+        <a class="card-link account-item-row" href="/items/{{ row.item_id }}?tab=budget">
+          <div>
+            <div class="row wrap account-item-title-row">
+              <strong class="account-item-title">{{ row.title }}</strong>
+              <span class="pill status-{{ row.status.value }}">{{ row.status.value }}</span>
+            </div>
+            <p class="account-item-list">{{ row.wishlist_name }}</p>
+          </div>
+          <strong>{{ row.total|money }}</strong>
+        </a>
+      {% else %}
+        <p>No items have savings in this account yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

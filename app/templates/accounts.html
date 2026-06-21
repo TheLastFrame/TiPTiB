@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Accounts · TiPTiB{% endblock %}
+{% block title %}Accounts &middot; TiPTiB{% endblock %}
 {% block content %}
   <section class="hero">
     <span class="eyebrow">Real-world labels</span>
@@ -9,21 +9,39 @@
 
   <section class="grid two">
     {% for row in rows %}
-      <article class="card">
-        <div class="row">
-          <div>
-            <h2>{{ row.account.name }}</h2>
-            <p>{{ "Default" if row.account.is_default else "Named account" }}{% if row.account.archived %} · archived{% endif %}</p>
+      {% set is_editing = error and values.get("account_id") == row.account.id %}
+      <article class="card account-card">
+        <div class="account-card-head">
+          <a class="account-card-title" href="/accounts/{{ row.account.id }}" aria-label="Open {{ row.account.name }}">
+            <div>
+              <h2>{{ row.account.name }}</h2>
+              <p>{{ "Default account" if row.account.is_default else "Additional account" }}{% if row.account.archived %} &middot; archived{% endif %}</p>
+            </div>
+          </a>
+          <div class="account-card-tools">
+            <strong>{{ row.total|money }}</strong>
+            <button class="icon-button" type="button" data-account-edit-toggle aria-label="Edit {{ row.account.name }}" title="Edit account">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4z"></path>
+                <path d="M13.5 6.5l4 4"></path>
+              </svg>
+            </button>
           </div>
-          <strong>{{ row.total|money }}</strong>
         </div>
-        <form class="form" method="post" action="/accounts/{{ row.account.id }}">
+        <a class="account-card-main" href="/accounts/{{ row.account.id }}" aria-label="View savings breakdown for {{ row.account.name }}">
+          <p>{{ row.item_count }} {{ "item" if row.item_count == 1 else "items" }} with savings</p>
+          {% if row.account.archived %}<span class="chip">Archived</span>{% endif %}
+        </a>
+        <form class="form inline-edit-form account-edit-form" method="post" action="/accounts/{{ row.account.id }}" data-account-edit-form {{ "" if is_editing else "hidden" }}>
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          {% if error and values.get("account_id") == row.account.id %}<p class="error">{{ error }}</p>{% endif %}
-          <input class="input" name="name" value="{{ values.get('name', row.account.name) if values.get('account_id') == row.account.id else row.account.name }}" required>
-          <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="is_default" {{ "checked" if row.account.is_default else "" }}> Default</label>
-          <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="archived" {{ "checked" if row.account.archived else "" }}> Archived</label>
-          <button class="button secondary" type="submit">Save account</button>
+          {% if is_editing %}<p class="error">{{ error }}</p>{% endif %}
+          <input class="input" name="name" value="{{ values.get('name', row.account.name) if is_editing else row.account.name }}" required>
+          <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="is_default" {{ "checked" if (values.get("is_default") if is_editing else row.account.is_default) else "" }}> Default</label>
+          <label class="row" style="justify-content:flex-start;"><input type="checkbox" name="archived" {{ "checked" if (values.get("archived") if is_editing else row.account.archived) else "" }}> Archived</label>
+          <div class="row wrap">
+            <button class="button secondary" type="submit">Save account</button>
+            <button class="button ghost" type="button" data-account-edit-cancel>Cancel</button>
+          </div>
         </form>
       </article>
     {% endfor %}

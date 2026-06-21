@@ -40,6 +40,26 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const accountEditToggle = event.target.closest("[data-account-edit-toggle]");
+  if (accountEditToggle) {
+    const card = accountEditToggle.closest(".account-card");
+    const form = card?.querySelector("[data-account-edit-form]");
+    if (form) {
+      form.hidden = false;
+      form.querySelector("input[name='name']")?.focus();
+    }
+    return;
+  }
+
+  const accountEditCancel = event.target.closest("[data-account-edit-cancel]");
+  if (accountEditCancel) {
+    const form = accountEditCancel.closest("[data-account-edit-form]");
+    if (form) {
+      form.hidden = true;
+    }
+    return;
+  }
+
   const moveToggle = event.target.closest("[data-item-move-toggle]");
   if (moveToggle) {
     const form = document.querySelector("[data-item-move-form]");
@@ -134,6 +154,9 @@ document.addEventListener("keydown", (event) => {
   if (form) {
     form.hidden = true;
   }
+  document.querySelectorAll("[data-account-edit-form]:not([hidden])").forEach((accountForm) => {
+    accountForm.hidden = true;
+  });
   const moveForm = document.querySelector("[data-item-move-form]:not([hidden])");
   if (moveForm) {
     moveForm.hidden = true;

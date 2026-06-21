@@ -48,6 +48,10 @@ def with_csrf(token: str, data: dict[str, object] | None = None) -> dict[str, ob
     return {"csrf_token": token} | dict(data or {})
 
 
+def created_item_id(location: str) -> int:
+    return int(location.rstrip("/").split("/")[-1])
+
+
 def chart_payload(response_text: str) -> dict[str, object]:
     match = re.search(r"data-chart='([^']+)'", response_text)
     assert match, response_text
@@ -1095,6 +1099,131 @@ def test_categories_can_be_renamed_recolored_and_archived():
         assert "Choose an active category." in response.text
         item_response = client.get(f"/items/{item_id}")
         assert "Seating" in item_response.text
+
+
+def test_accounts_overview_hides_edit_forms_until_requested():
+    with TestClient(app) as client:
+        setup_admin(client)
+        response = client.get("/accounts")
+
+        assert response.status_code == 200
+        assert "data-account-edit-toggle" in response.text
+        assert "data-account-edit-form hidden" in response.text
+        assert 'href="/accounts/1"' in response.text
+
+
+def test_account_update_error_opens_affected_edit_form():
+    with TestClient(app) as client:
+        setup_admin(client)
+        token = csrf_from(client, "/accounts")
+        response = client.post("/accounts", data=with_csrf(token, {"name": "ING"}), follow_redirects=False)
+        assert response.status_code == 303
+
+        token = csrf_from(client, "/accounts")
+        response = client.post("/accounts/2", data=with_csrf(token, {"name": "Cash"}), follow_redirects=False)
+
+        assert response.status_code == 400
+        assert "An account with that name already exists." in response.text
+        assert (
+            '<form class="form inline-edit-form account-edit-form" method="post" action="/accounts/2" data-account-edit-form >'
+            in response.text
+        )
+
+
+def test_account_detail_groups_savings_by_item_for_that_account():
+    with TestClient(app) as client:
+        setup_admin(client)
+        token = csrf_from(client, "/accounts")
+        response = client.post("/accounts", data=with_csrf(token, {"name": "Trade Republic"}), follow_redirects=False)
+        assert response.status_code == 303
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Camera", "status": "saving", "price_avg": "200"}),
+            follow_redirects=False,
+        )
+        camera_id = created_item_id(response.headers["location"])
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Tripod", "status": "saving", "price_avg": "80"}),
+            follow_redirects=False,
+        )
+        tripod_id = created_item_id(response.headers["location"])
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Cash only", "status": "saving", "price_avg": "40"}),
+            follow_redirects=False,
+        )
+        cash_only_id = created_item_id(response.headers["location"])
+
+        token = csrf_from(client, f"/items/{camera_id}?tab=budget")
+        assert (
+            client.post(
+                f"/items/{camera_id}/savings",
+                data=with_csrf(token, {"amount": "25", "account_id": 2}),
+                follow_redirects=False,
+            ).status_code
+            == 303
+        )
+        assert (
+            client.post(
+                f"/items/{camera_id}/savings",
+                data=with_csrf(token, {"amount": "10.50", "account_id": 2}),
+                follow_redirects=False,
+            ).status_code
+            == 303
+        )
+        token = csrf_from(client, f"/items/{tripod_id}?tab=budget")
+        assert (
+            client.post(
+                f"/items/{tripod_id}/savings",
+                data=with_csrf(token, {"amount": "15", "account_id": 2}),
+                follow_redirects=False,
+            ).status_code
+            == 303
+        )
+        token = csrf_from(client, f"/items/{cash_only_id}?tab=budget")
+        assert (
+            client.post(
+                f"/items/{cash_only_id}/savings",
+                data=with_csrf(token, {"amount": "99", "account_id": 1}),
+                follow_redirects=False,
+            ).status_code
+            == 303
+        )
+
+        response = client.get("/accounts/2")
+
+        assert response.status_code == 200
+        assert "Trade Republic" in response.text
+        assert "50.50 EUR" in response.text
+        assert "Camera" in response.text
+        assert "General" in response.text
+        assert '<span class="pill status-saving">saving</span>' in response.text
+        assert "35.50 EUR" in response.text
+        assert f'href="/items/{camera_id}?tab=budget"' in response.text
+        assert "Tripod" in response.text
+        assert "15.00 EUR" in response.text
+        assert "Cash only" not in response.text
+
+
+def test_account_detail_scopes_to_current_user():
+    with TestClient(app) as client:
+        setup_admin(client)
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/users",
+            data=with_csrf(token, {"display_name": "Ana", "username": "ana", "password": "another-long-password"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        logout(client)
+        login(client, username="ana", password="another-long-password")
+
+        response = client.get("/accounts/1")
+
+        assert response.status_code == 404
 
 
 def test_category_update_validation_and_ownership():
