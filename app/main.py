@@ -65,6 +65,7 @@ from app.services import (
     item_unit_price,
     money,
     next_rank,
+    planned_account_saved_total,
     planned_saved_total,
     progress_percent,
     projected_recurring_deposits,
@@ -553,33 +554,39 @@ def lists_context(
 def accounts_context(db: Session, user: User, error: str | None = None, values: dict[str, object] | None = None) -> dict[str, object]:
     rows = []
     for account in db.scalars(select(SavingAccount).where(SavingAccount.user_id == user.id).order_by(SavingAccount.archived, SavingAccount.name)).all():
-        total = money(db.scalar(select(func.coalesce(func.sum(SavingsEntry.amount), 0)).where(SavingsEntry.account_id == account.id)))
+        total = planned_account_saved_total(db, user.id, account.id)
         item_count = db.scalar(
             select(func.count(func.distinct(SavingsEntry.item_id))).where(
                 SavingsEntry.user_id == user.id,
                 SavingsEntry.account_id == account.id,
+                SavingsEntry.item_id.in_(
+                    select(Item.id).where(Item.user_id == user.id, Item.status.in_(PLANNED_TOTAL_STATUSES))
+                ),
             )
         )
         rows.append({"account": account, "total": total, "item_count": item_count or 0})
     return common_context(db, user) | {"active": "accounts", "rows": rows, "error": error, "values": values or {}}
 
 
-def account_detail_context(db: Session, user: User, account: SavingAccount) -> dict[str, object]:
+def account_detail_context(db: Session, user: User, account: SavingAccount, show_history: bool = False) -> dict[str, object]:
     saved_total = func.coalesce(func.sum(SavingsEntry.amount), 0)
+    query = (
+        select(Item.id, Item.title, Wishlist.name, Item.status, saved_total)
+        .join(SavingsEntry, SavingsEntry.item_id == Item.id)
+        .join(Wishlist, Wishlist.id == Item.wishlist_id)
+        .where(
+            Item.user_id == user.id,
+            SavingsEntry.user_id == user.id,
+            SavingsEntry.account_id == account.id,
+        )
+        .group_by(Item.id, Item.title, Wishlist.name, Item.status)
+        .order_by(saved_total.desc(), Item.title)
+    )
+    if not show_history:
+        query = query.where(Item.status.in_(PLANNED_TOTAL_STATUSES))
     item_rows = [
         {"item_id": item_id, "title": title, "wishlist_name": wishlist_name, "status": status, "total": money(total)}
-        for item_id, title, wishlist_name, status, total in db.execute(
-            select(Item.id, Item.title, Wishlist.name, Item.status, saved_total)
-            .join(SavingsEntry, SavingsEntry.item_id == Item.id)
-            .join(Wishlist, Wishlist.id == Item.wishlist_id)
-            .where(
-                Item.user_id == user.id,
-                SavingsEntry.user_id == user.id,
-                SavingsEntry.account_id == account.id,
-            )
-            .group_by(Item.id, Item.title, Wishlist.name, Item.status)
-            .order_by(saved_total.desc(), Item.title)
-        ).all()
+        for item_id, title, wishlist_name, status, total in db.execute(query).all()
     ]
     total = sum((row["total"] for row in item_rows), Decimal("0.00"))
     return common_context(db, user) | {
@@ -587,6 +594,7 @@ def account_detail_context(db: Session, user: User, account: SavingAccount) -> d
         "account": account,
         "item_rows": item_rows,
         "total": total,
+        "show_history": show_history,
         "show_back_button": True,
         "back_url": "/accounts",
     }
@@ -1396,11 +1404,12 @@ def account_detail(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(current_user)],
     account_id: int,
+    show_history: bool = False,
 ):
     account = db.get(SavingAccount, account_id)
     if not account or account.user_id != user.id:
         raise HTTPException(status_code=404)
-    return render(request, "account_detail.html", account_detail_context(db, user, account))
+    return render(request, "account_detail.html", account_detail_context(db, user, account, show_history))
 
 
 @app.post("/accounts")

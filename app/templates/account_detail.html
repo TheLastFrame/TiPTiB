@@ -16,7 +16,14 @@
   <section class="panel stack">
     <div class="row wrap">
       <h2>Saved by item</h2>
-      <span class="pill">{{ item_rows|length }} items</span>
+      <div class="row wrap">
+        <span class="pill">{{ item_rows|length }} items</span>
+        {% if show_history %}
+          <a class="button ghost" href="/accounts/{{ account.id }}">Hide bought/skipped</a>
+        {% else %}
+          <a class="button secondary" href="/accounts/{{ account.id }}?show_history=true">Show bought/skipped</a>
+        {% endif %}
+      </div>
     </div>
     <div class="tableish">
       {% for row in item_rows %}

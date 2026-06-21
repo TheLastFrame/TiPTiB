@@ -416,7 +416,8 @@ def test_saved_planning_summaries_exclude_bought_and_skipped_items():
         assert response.status_code == 200
         assert "Virtually saved</span><strong>25.00 EUR</strong>" in response.text
         assert "Planned</span><strong>100.00 EUR</strong>" in response.text
-        assert "Cash</span><strong>125.00 EUR</strong>" in response.text
+        assert "Cash</span><strong>25.00 EUR</strong>" in response.text
+        assert "Cash</span><strong>125.00 EUR</strong>" not in response.text
 
         response = client.get("/lists")
         assert response.status_code == 200
@@ -429,6 +430,12 @@ def test_saved_planning_summaries_exclude_bought_and_skipped_items():
         assert "Skipped tablet" in response.text
         assert '<span class="chip">25.00 EUR saved</span>' in response.text
         assert '<span class="chip">125.00 EUR saved</span>' not in response.text
+
+        response = client.get("/accounts")
+        assert response.status_code == 200
+        assert "<strong>25.00 EUR</strong>" in response.text
+        assert "1 item with savings" in response.text
+        assert "<strong>125.00 EUR</strong>" not in response.text
 
 
 def test_recurring_rule_visibility_and_blank_next_run_preserves_schedule():
@@ -1279,6 +1286,74 @@ def test_account_detail_groups_savings_by_item_for_that_account():
         assert "Tripod" in response.text
         assert "15.00 EUR" in response.text
         assert "Cash only" not in response.text
+
+
+def test_account_detail_hides_history_items_until_toggled():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Active account item", "status": "planned", "price_avg": "100"}),
+            follow_redirects=False,
+        )
+        active_item_id = created_item_id(response.headers["location"])
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Bought account item", "status": "bought", "price_avg": "80"}),
+            follow_redirects=False,
+        )
+        bought_item_id = created_item_id(response.headers["location"])
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Skipped account item", "status": "skipped", "price_avg": "120"}),
+            follow_redirects=False,
+        )
+        skipped_item_id = created_item_id(response.headers["location"])
+
+        token = csrf_from(client, f"/items/{active_item_id}?tab=budget")
+        response = client.post(
+            f"/items/{active_item_id}/savings",
+            data=with_csrf(token, {"amount": "25", "account_id": 1}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        token = csrf_from(client, f"/items/{bought_item_id}?tab=budget")
+        response = client.post(
+            f"/items/{bought_item_id}/savings",
+            data=with_csrf(token, {"amount": "40", "account_id": 1}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        token = csrf_from(client, f"/items/{skipped_item_id}?tab=budget")
+        response = client.post(
+            f"/items/{skipped_item_id}/savings",
+            data=with_csrf(token, {"amount": "60", "account_id": 1}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        response = client.get("/accounts/1")
+        assert response.status_code == 200
+        assert "Active account item" in response.text
+        assert "Bought account item" not in response.text
+        assert "Skipped account item" not in response.text
+        assert "<strong>25.00 EUR</strong>" in response.text
+        assert "<strong>125.00 EUR</strong>" not in response.text
+        assert 'href="/accounts/1?show_history=true">Show bought/skipped</a>' in response.text
+
+        response = client.get("/accounts/1?show_history=true")
+        assert response.status_code == 200
+        assert "Active account item" in response.text
+        assert "Bought account item" in response.text
+        assert "Skipped account item" in response.text
+        assert "<strong>125.00 EUR</strong>" in response.text
+        assert '<span class="pill status-bought">bought</span>' in response.text
+        assert '<span class="pill status-skipped">skipped</span>' in response.text
+        assert 'href="/accounts/1">Hide bought/skipped</a>' in response.text
 
 
 def test_account_detail_scopes_to_current_user():

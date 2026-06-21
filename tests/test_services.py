@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
-from app.models import Item, ItemStatus, RecurrenceCadence, SavingAccount, SavingsRule, User, Wishlist
+from app.models import Item, ItemStatus, RecurrenceCadence, SavingAccount, SavingsEntry, SavingsRule, User, Wishlist
 from app.services import (
     account_breakdown,
     goal_reach_estimate,
@@ -58,6 +58,18 @@ def test_recurring_savings_create_ledger_entries_once():
 
     created = process_due_savings_rules(db, datetime.now(timezone.utc))
     created_again = process_due_savings_rules(db, datetime.now(timezone.utc))
+    bought_item = Item(
+        user_id=user.id,
+        wishlist_id=wishlist.id,
+        title="Already bought",
+        rank=2,
+        status=ItemStatus.bought,
+        price_avg=Decimal("100.00"),
+    )
+    db.add(bought_item)
+    db.flush()
+    db.add(SavingsEntry(user_id=user.id, item_id=bought_item.id, account_id=account.id, amount=Decimal("40.00")))
+    db.commit()
 
     assert created == 3
     assert created_again == 0

@@ -8,7 +8,7 @@ import re
 from babel.core import UnknownLocaleError
 from babel.numbers import NumberFormatError, get_currency_symbol, parse_decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -153,6 +153,19 @@ def planned_saved_total(db: Session, user_id: int, wishlist_id: int | None = Non
     return money(db.scalar(query))
 
 
+def planned_account_saved_total(db: Session, user_id: int, account_id: int) -> Decimal:
+    total = db.scalar(
+        select(func.coalesce(func.sum(SavingsEntry.amount), 0))
+        .join(Item, Item.id == SavingsEntry.item_id)
+        .where(
+            SavingsEntry.user_id == user_id,
+            SavingsEntry.account_id == account_id,
+            Item.status.in_(PLANNED_TOTAL_STATUSES),
+        )
+    )
+    return money(total)
+
+
 def item_target(item: Item) -> Decimal:
     amount = max(1, int(item.amount or 1))
     return item_unit_price(item) * amount
@@ -192,9 +205,14 @@ def next_rank(db: Session, user_id: int, wishlist_id: int) -> int:
 
 
 def account_breakdown(db: Session, user_id: int) -> list[tuple[str, Decimal]]:
+    planned_amount = func.coalesce(
+        func.sum(case((Item.status.in_(PLANNED_TOTAL_STATUSES), SavingsEntry.amount), else_=0)),
+        0,
+    )
     rows = db.execute(
-        select(SavingAccount.name, func.coalesce(func.sum(SavingsEntry.amount), 0))
+        select(SavingAccount.name, planned_amount)
         .join(SavingsEntry, SavingsEntry.account_id == SavingAccount.id, isouter=True)
+        .join(Item, Item.id == SavingsEntry.item_id, isouter=True)
         .where(SavingAccount.user_id == user_id, SavingAccount.archived.is_(False))
         .group_by(SavingAccount.id)
         .order_by(SavingAccount.is_default.desc(), SavingAccount.name)
