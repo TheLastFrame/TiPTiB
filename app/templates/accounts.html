@@ -7,7 +7,7 @@
     <p>Track where money is meant to sit without managing bank balances.</p>
   </section>
 
-  <section class="grid two">
+  <section class="grid two account-grid">
     {% for row in rows %}
       {% set is_editing = error and values.get("account_id") == row.account.id %}
       <article class="card account-card">

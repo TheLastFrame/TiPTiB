@@ -349,6 +349,9 @@ textarea.input { min-height: 96px; resize: vertical; }
   position: relative;
   transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
 }
+.account-grid {
+  align-items: start;
+}
 .account-card:has(.account-card-main:hover),
 .account-card:has(.account-card-main:focus-visible),
 .account-card:has(.account-card-title:hover),
