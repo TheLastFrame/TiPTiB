@@ -19,6 +19,7 @@ from app.config import Settings  # noqa: E402
 from app.database import Base, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.security import security_headers, validate_first_run_setup_allowed, validate_security_settings  # noqa: E402
+from app.version import RELEASES_URL, SOURCE_URL, load_version_info  # noqa: E402
 
 ADMIN_PASSWORD = "long-test-password"
 
@@ -1488,6 +1489,73 @@ def test_users_cannot_manage_each_others_lists():
         assert response.status_code == 404
         response = client.post("/lists/1/delete", data=with_csrf(token), follow_redirects=False)
         assert response.status_code == 404
+
+
+def test_version_info_falls_back_when_file_is_missing(tmp_path):
+    version_info = load_version_info(tmp_path / "missing-version.json")
+
+    assert version_info.version == "0.25.0"
+    assert version_info.commit == ""
+    assert version_info.build_date == ""
+    assert version_info.source_url == SOURCE_URL
+    assert version_info.releases_url == RELEASES_URL
+
+
+def test_version_info_reads_stamped_file(tmp_path):
+    version_file = tmp_path / "VERSION.json"
+    version_file.write_text(
+        json.dumps(
+            {
+                "version": "1.2.3",
+                "commit": "abcdef1234567890",
+                "build_date": "2026-06-21T17:00:00Z",
+                "source_url": "https://example.test/repo",
+                "releases_url": "https://example.test/releases",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    version_info = load_version_info(version_file)
+
+    assert version_info.version == "1.2.3"
+    assert version_info.commit == "abcdef1234567890"
+    assert version_info.build_date == "2026-06-21T17:00:00Z"
+    assert version_info.source_url == "https://example.test/repo"
+    assert version_info.releases_url == "https://example.test/releases"
+
+
+def test_settings_shows_version_and_admin_update_links_only_for_admins():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        response = client.get("/settings")
+        assert response.status_code == 200
+        assert "Installed version" in response.text
+        assert "0.25.0" in response.text
+        assert f'href="{RELEASES_URL}"' in response.text
+        assert f'href="{SOURCE_URL}"' in response.text
+        assert "Check for updates" in response.text
+        assert "Repository" in response.text
+
+        token = csrf_from(client, "/settings")
+        response = client.post(
+            "/settings/users",
+            data=with_csrf(token, {"display_name": "Ada", "username": "ada", "password": "long-ada-password"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        logout(client)
+        login(client, username="ada", password="long-ada-password")
+
+        response = client.get("/settings")
+        assert response.status_code == 200
+        assert "Installed version" in response.text
+        assert "0.25.0" in response.text
+        assert "Check for updates" not in response.text
+        assert "Repository" not in response.text
+        assert f'href="{RELEASES_URL}"' not in response.text
+        assert f'href="{SOURCE_URL}"' not in response.text
 
 
 def test_public_and_protected_route_boundaries():

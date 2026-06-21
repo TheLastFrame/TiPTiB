@@ -57,6 +57,20 @@ jobs:
             type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
 
+      - name: Set build version
+        id: build-version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          elif [[ "${GITHUB_REF}" == "refs/heads/master" ]]; then
+            version="nightly-${GITHUB_SHA::12}"
+          else
+            version="pr-${GITHUB_SHA::12}"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
       - name: Build container
         uses: docker/build-push-action@v6
         with:
@@ -65,3 +79,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ steps.build-version.outputs.version }}
+            GIT_COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ steps.build-version.outputs.date }}

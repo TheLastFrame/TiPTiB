@@ -52,6 +52,34 @@
     </article>
 
     <article class="panel stack">
+      <h2>Application</h2>
+      <div class="version-list">
+        <div class="version-row">
+          <span class="eyebrow">Installed version</span>
+          <strong>{{ version_info.version }}</strong>
+        </div>
+        {% if version_info.commit %}
+          <div class="version-row">
+            <span class="eyebrow">Commit</span>
+            <code>{{ version_info.commit[:12] }}</code>
+          </div>
+        {% endif %}
+        {% if version_info.build_date %}
+          <div class="version-row">
+            <span class="eyebrow">Build date</span>
+            <span>{{ version_info.build_date }}</span>
+          </div>
+        {% endif %}
+      </div>
+      {% if user.is_admin %}
+        <div class="settings-actions">
+          <a class="button secondary" href="{{ version_info.releases_url }}" target="_blank" rel="noreferrer noopener">Check for updates</a>
+          <a class="button ghost" href="{{ version_info.source_url }}" target="_blank" rel="noreferrer noopener">Repository</a>
+        </div>
+      {% endif %}
+    </article>
+
+    <article class="panel stack">
       <h2>Categories</h2>
       {% if errors.get("categories") %}<p class="error">{{ errors.get("categories") }}</p>{% endif %}
       {% if categories %}

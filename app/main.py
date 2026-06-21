@@ -76,8 +76,10 @@ from app.security import (
     validate_first_run_setup_allowed,
     validate_security_settings,
 )
+from app.version import load_version_info
 
 settings = get_settings()
+version_info = load_version_info()
 logger = logging.getLogger("tiptib.startup")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -610,6 +612,7 @@ def settings_context(
         "values": values or {},
         "locale_display_name": locale_display_name(user.locale),
         "locale_options": locale_options(selected_currency.strip().upper()),
+        "version_info": version_info.as_dict(),
     }
 
 

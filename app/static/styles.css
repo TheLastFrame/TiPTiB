@@ -165,6 +165,28 @@ p { color: var(--muted); margin: 0; line-height: 1.5; }
   justify-self: center;
   width: 100%;
 }
+.version-list {
+  display: grid;
+  gap: 10px;
+}
+.version-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.version-row strong,
+.version-row code,
+.version-row span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+.settings-actions {
+  display: grid;
+  gap: 8px;
+}
 .input {
   width: 100%;
   min-height: 44px;
