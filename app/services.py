@@ -142,6 +142,17 @@ def item_saved_total(db: Session, item_id: int) -> Decimal:
     return money(total)
 
 
+def planned_saved_total(db: Session, user_id: int, wishlist_id: int | None = None) -> Decimal:
+    query = (
+        select(func.coalesce(func.sum(SavingsEntry.amount), 0))
+        .join(Item, Item.id == SavingsEntry.item_id)
+        .where(Item.user_id == user_id, Item.status.in_(PLANNED_TOTAL_STATUSES))
+    )
+    if wishlist_id is not None:
+        query = query.where(Item.wishlist_id == wishlist_id)
+    return money(db.scalar(query))
+
+
 def item_target(item: Item) -> Decimal:
     amount = max(1, int(item.amount or 1))
     return item_unit_price(item) * amount

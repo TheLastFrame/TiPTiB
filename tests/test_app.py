@@ -359,6 +359,78 @@ def test_setup_login_create_item_and_pwa_routes():
         assert "window.location.reload()" in app_js.text
 
 
+def test_saved_planning_summaries_exclude_bought_and_skipped_items():
+    with TestClient(app) as client:
+        setup_admin(client)
+
+        token = csrf_from(client, "/items/new")
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Active camera", "status": "planned", "price_avg": "100"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        active_item_id = created_item_id(response.headers["location"])
+
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Bought headphones", "status": "bought", "price_avg": "80"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        bought_item_id = created_item_id(response.headers["location"])
+
+        response = client.post(
+            "/items",
+            data=with_csrf(token, {"wishlist_id": 1, "title": "Skipped tablet", "status": "skipped", "price_avg": "120"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        skipped_item_id = created_item_id(response.headers["location"])
+
+        token = csrf_from(client, f"/items/{active_item_id}?tab=budget")
+        response = client.post(
+            f"/items/{active_item_id}/savings",
+            data=with_csrf(token, {"amount": "25", "account_id": 1, "note": "Active saved"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        token = csrf_from(client, f"/items/{bought_item_id}?tab=budget")
+        response = client.post(
+            f"/items/{bought_item_id}/savings",
+            data=with_csrf(token, {"amount": "40", "account_id": 1, "note": "Bought saved"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        token = csrf_from(client, f"/items/{skipped_item_id}?tab=budget")
+        response = client.post(
+            f"/items/{skipped_item_id}/savings",
+            data=with_csrf(token, {"amount": "60", "account_id": 1, "note": "Skipped saved"}),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        response = client.get("/dashboard")
+        assert response.status_code == 200
+        assert "Virtually saved</span><strong>25.00 EUR</strong>" in response.text
+        assert "Planned</span><strong>100.00 EUR</strong>" in response.text
+        assert "Cash</span><strong>125.00 EUR</strong>" in response.text
+
+        response = client.get("/lists")
+        assert response.status_code == 200
+        assert '<div class="row"><span>100.00 EUR planned</span><strong>25.00 EUR</strong></div>' in response.text
+        assert "125.00 EUR</strong></div>" not in response.text
+
+        response = client.get("/lists/1?status=all&show_sum=true")
+        assert response.status_code == 200
+        assert "Bought headphones" in response.text
+        assert "Skipped tablet" in response.text
+        assert '<span class="chip">25.00 EUR saved</span>' in response.text
+        assert '<span class="chip">125.00 EUR saved</span>' not in response.text
+
+
 def test_recurring_rule_visibility_and_blank_next_run_preserves_schedule():
     with TestClient(app) as client:
         setup_admin(client)

@@ -65,6 +65,7 @@ from app.services import (
     item_unit_price,
     money,
     next_rank,
+    planned_saved_total,
     progress_percent,
     projected_recurring_deposits,
     process_due_savings_rules,
@@ -526,13 +527,7 @@ def lists_context(
     for wishlist in db.scalars(wishlist_query).all():
         items = db.scalars(select(Item).where(Item.user_id == user.id, Item.wishlist_id == wishlist.id, Item.status.in_(ACTIVE_STATUSES))).all()
         total = sum((item_target(item) for item in items if item.status in PLANNED_TOTAL_STATUSES), Decimal("0.00"))
-        saved = money(
-            db.scalar(
-                select(func.coalesce(func.sum(SavingsEntry.amount), 0))
-                .join(Item, Item.id == SavingsEntry.item_id)
-                .where(Item.user_id == user.id, Item.wishlist_id == wishlist.id)
-            )
-        )
+        saved = planned_saved_total(db, user.id, wishlist.id)
         rows.append(
             {
                 "wishlist": wishlist,
@@ -832,7 +827,7 @@ def dashboard(
         ),
         Decimal("0.00"),
     )
-    saved_total = money(db.scalar(select(func.coalesce(func.sum(SavingsEntry.amount), 0)).where(SavingsEntry.user_id == user.id)))
+    saved_total = planned_saved_total(db, user.id)
     context = common_context(db, user) | {
         "request": request,
         "active": "dashboard",
@@ -1018,7 +1013,10 @@ def list_detail(
             }
         )
     filtered_target_total = sum((card["target"] for card in item_cards), Decimal("0.00"))
-    filtered_saved_total = sum((card["saved"] for card in item_cards), Decimal("0.00"))
+    filtered_saved_total = sum(
+        (card["saved"] for card in item_cards if card["item"].status in PLANNED_TOTAL_STATUSES),
+        Decimal("0.00"),
+    )
     return render(
         request,
         "list_detail.html",
